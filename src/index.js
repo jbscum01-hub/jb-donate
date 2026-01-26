@@ -15,3 +15,15 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 client.login(ENV.DISCORD_TOKEN);
+
+// ===== Render Keep Alive HTTP Server =====
+import http from "http";
+
+const PORT = process.env.PORT || 3000;
+
+http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("Discord bot is running\n");
+}).listen(PORT, () => {
+  console.log(`🌐 HTTP server running on port ${PORT}`);
+});
