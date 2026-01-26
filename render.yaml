@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: scum-donate-bot
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+
+  # Create a Scheduled Job in Render UI:
+  # Command: node src/jobs/vipTick.js
+  # Schedule: every 6 hours
