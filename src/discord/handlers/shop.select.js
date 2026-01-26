@@ -1,9 +1,6 @@
 import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from "discord.js";
 
 export async function openOrderModal(interaction) {
-  // ✅ สำคัญมาก: กัน interaction timeout
-  await interaction.deferUpdate();
-
   try {
     const [type, code] = interaction.values[0].split(":");
 
@@ -15,7 +12,8 @@ export async function openOrderModal(interaction) {
       .setCustomId("ign")
       .setLabel("IGN (ชื่อตัวละคร)")
       .setStyle(TextInputStyle.Short)
-      .setRequired(true);
+      .setRequired(true)
+      .setMaxLength(100);
 
     const steam = new TextInputBuilder()
       .setCustomId("steam")
@@ -29,7 +27,8 @@ export async function openOrderModal(interaction) {
       .setCustomId("note")
       .setLabel("หมายเหตุ (optional)")
       .setStyle(TextInputStyle.Paragraph)
-      .setRequired(false);
+      .setRequired(false)
+      .setMaxLength(500);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(ign),
@@ -37,9 +36,14 @@ export async function openOrderModal(interaction) {
       new ActionRowBuilder().addComponents(note),
     );
 
+    // ✅ showModal ต้องเป็น "first response" เท่านั้น
     await interaction.showModal(modal);
-
   } catch (err) {
     console.error("openOrderModal error:", err);
+
+    // ✅ ถ้า showModal ไม่ได้จริงๆ ให้ fallback เป็นข้อความ ephemeral
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: "❌ เปิดฟอร์มไม่ได้ ลองใหม่อีกครั้งนะ", ephemeral: true }).catch(() => {});
+    }
   }
 }
