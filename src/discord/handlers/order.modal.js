@@ -1,3 +1,4 @@
+// src/discord/handlers/order.modal.js
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } from "discord.js";
 import { DONATE_PACKS, BOOSTS, VIP_PACKS } from "../../domain/catalog.js";
 import { isSteamId17, safeSlugUsername } from "../../domain/validators.js";
@@ -8,21 +9,50 @@ import { createTicketChannel } from "../utils/tickets.js";
 import { buildStaffPanel } from "../panels/staffPanel.js";
 
 export async function createOrderFromModal(interaction) {
-  const [_, type, code] = interaction.customId.split(":");
+  // customId format: order_create:DONATE:PLATINUM
+  const parts = String(interaction.customId || "").split(":");
+  const type = parts[1];
+  const code = parts[2];
+
+  if (!type || !code) {
+    return interaction.reply({
+      content: `❌ customId ผิดรูปแบบ: ${interaction.customId}`,
+      ephemeral: true,
+    });
+  }
+
   const ign = interaction.fields.getTextInputValue("ign").trim();
   const steam = interaction.fields.getTextInputValue("steam").trim();
   const note = (interaction.fields.getTextInputValue("note") || "").trim();
 
   if (!isSteamId17(steam)) {
-    return interaction.reply({ content: "❌ SteamID ต้องเป็นเลข 17 หลักเท่านั้น", ephemeral: true });
+    return interaction.reply({
+      content: "❌ SteamID ต้องเป็นเลข 17 หลักเท่านั้น",
+      ephemeral: true,
+    });
   }
 
-  let amount = 0;
-  if (type === "DONATE") amount = DONATE_PACKS[code]?.price ?? 0;
-  if (type === "BOOST") amount = BOOSTS[code]?.price ?? 0;
-  if (type === "VIP") amount = VIP_PACKS[code]?.price ?? 0;
+  // Defer early to avoid interaction timeout (Render free can be slow)
+  await interaction.deferReply({ ephemeral: true });
 
-  if (!amount) return interaction.reply({ content: "❌ ไม่พบแพ็กที่เลือก", ephemeral: true });
+  // Resolve pack (must exist)
+  let pack = null;
+  if (type === "DONATE") pack = DONATE_PACKS?.[code] ?? null;
+  else if (type === "BOOST") pack = BOOSTS?.[code] ?? null;
+  else if (type === "VIP") pack = VIP_PACKS?.[code] ?? null;
+
+  if (!pack) {
+    return interaction.editReply({
+      content: `❌ ไม่พบแพ็ก (${type}:${code})`,
+    });
+  }
+
+  const amount = Number(pack.price ?? 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return interaction.editReply({
+      content: `❌ แพ็กนี้ยังไม่ได้ตั้งราคา (${type}:${code})`,
+    });
+  }
 
   const orderNo = await nextOrderNo("JB");
 
@@ -33,19 +63,25 @@ export async function createOrderFromModal(interaction) {
 
   const ticket = await createTicketChannel(interaction.guild, interaction.user, channelName);
 
-  const order = await OrdersRepo.insert({
+  await OrdersRepo.insert({
     order_no: orderNo,
     guild_id: interaction.guildId,
     user_id: interaction.user.id,
     user_tag: interaction.user.tag,
-    type, pack_code: code, amount,
-    ign, steam_id: steam, note,
+    type,
+    pack_code: code,
+    amount,
+    ign,
+    steam_id: steam,
+    note,
     ticket_channel_id: ticket.id,
   });
 
   // Queue message
   const queueCh = await interaction.client.channels.fetch(IDS.QUEUE_CHANNEL_ID);
-  const qmsg = await queueCh.send(`🧾 New Order **${orderNo}** | <@${interaction.user.id}> | ${type}:${code} | ${amount}฿ | Ticket: <#${ticket.id}>`);
+  const qmsg = await queueCh.send(
+    `🧾 New Order **${orderNo}** | <@${interaction.user.id}> | ${type}:${code} | ${amount}฿ | Ticket: <#${ticket.id}>`
+  );
   await OrdersRepo.setQueueMessageId(orderNo, qmsg.id);
 
   // Ticket intro
@@ -58,15 +94,16 @@ export async function createOrderFromModal(interaction) {
       { name: "IGN", value: ign, inline: true },
       { name: "SteamID", value: steam, inline: true },
       { name: "Note", value: note ? note : "-", inline: false },
-      { name: "Status", value: "PENDING", inline: true },
+      { name: "Status", value: "PENDING", inline: true }
     );
 
   const components = [];
 
-  // model select (player chooses model)
+  // model select (player chooses model) - only for DONATE packs
   if (type === "DONATE") {
-    const p = DONATE_PACKS[code];
+    const p = pack; // resolved donate pack
     const options = [];
+
     for (const v of (p.vehicleChoices ?? [])) options.push({ label: `CAR: ${v}`, value: `CAR:${v}` });
     for (const b of (p.boatChoices ?? [])) options.push({ label: `BOAT: ${b}`, value: `BOAT:${b}` });
 
@@ -81,7 +118,13 @@ export async function createOrderFromModal(interaction) {
 
   const staffRows = buildStaffPanel(orderNo);
 
-  await ticket.send({ content: `<@${interaction.user.id}>`, embeds: [intro], components: [...components, ...staffRows] });
+  await ticket.send({
+    content: `<@${interaction.user.id}>`,
+    embeds: [intro],
+    components: [...components, ...staffRows],
+  });
 
-  await interaction.reply({ content: `✅ สร้าง Ticket แล้ว: <#${ticket.id}> (Order: ${orderNo})`, ephemeral: true });
+  await interaction.editReply({
+    content: `✅ สร้าง Ticket แล้ว: <#${ticket.id}> (Order: ${orderNo})`,
+  });
 }
