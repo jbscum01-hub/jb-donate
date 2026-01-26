@@ -12,8 +12,7 @@ export async function openOrderModal(interaction) {
       .setCustomId("ign")
       .setLabel("IGN (ชื่อตัวละคร)")
       .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setMaxLength(100);
+      .setRequired(true);
 
     const steam = new TextInputBuilder()
       .setCustomId("steam")
@@ -27,8 +26,7 @@ export async function openOrderModal(interaction) {
       .setCustomId("note")
       .setLabel("หมายเหตุ (optional)")
       .setStyle(TextInputStyle.Paragraph)
-      .setRequired(false)
-      .setMaxLength(500);
+      .setRequired(false);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(ign),
@@ -36,14 +34,13 @@ export async function openOrderModal(interaction) {
       new ActionRowBuilder().addComponents(note),
     );
 
-    // ✅ showModal ต้องเป็น "first response" เท่านั้น
-    await interaction.showModal(modal);
+    // ✅ ต้องตอบทันที: ห้ามมี await อื่นก่อนหน้านี้
+    return await interaction.showModal(modal);
   } catch (err) {
     console.error("openOrderModal error:", err);
-
-    // ✅ ถ้า showModal ไม่ได้จริงๆ ให้ fallback เป็นข้อความ ephemeral
+    // fallback
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: "❌ เปิดฟอร์มไม่ได้ ลองใหม่อีกครั้งนะ", ephemeral: true }).catch(() => {});
+      return interaction.reply({ content: "❌ เปิดฟอร์มไม่ทัน กรุณากดเลือกแพ็กอีกครั้ง", ephemeral: true }).catch(() => {});
     }
   }
 }
