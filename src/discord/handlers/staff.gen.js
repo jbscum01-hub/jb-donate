@@ -82,3 +82,8 @@ export async function genTemplate(interaction) {
 
   return safeReply(interaction, { content: `✅ GEN sent to log for ${orderNo}`, ephemeral: true });
 }
+
+// Backward-compat export (router imports genCommands)
+export async function genCommands(interaction) {
+  return genTemplate(interaction);
+}
