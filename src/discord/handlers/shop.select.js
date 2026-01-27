@@ -1,75 +1,40 @@
 // src/discord/handlers/shop_select.js
-import {
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  ActionRowBuilder,
-} from "discord.js";
+const { loadConfig } = require("../utils");          // ปรับ path ให้ตรงของคุณ
+const { buildDonateModal } = require("./modals");    // ปรับ path ให้ตรงของคุณ
 
-export async function openOrderModal(interaction) {
+async function openOrderModal(interaction) {
   try {
-    const raw = interaction.values?.[0];
-    if (!raw) {
-      // กันเคส interaction แปลก ๆ
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: "❌ ไม่พบแพ็กที่เลือก ลองใหม่อีกครั้งนะคะ", ephemeral: true });
-      }
-      return;
+    // ✅ ต้องเป็น select menu ตัวนี้เท่านั้น
+    if (!interaction.isStringSelectMenu()) return;
+    if (interaction.customId !== "donate_select_package") return;
+
+    // ✅ ห้าม defer/reply ก่อน showModal
+    const cfg = loadConfig();
+    const packageKey = interaction.values?.[0];
+    const pkg = cfg?.packages?.find(p => p.key === packageKey);
+
+    if (!pkg) {
+      // ตอบได้ (แทน modal) เพราะไม่ต้องเปิด modal แล้ว
+      return interaction.reply({
+        content: "แพ็กนี้ไม่มีในระบบ หรือ config ยังไม่ถูกต้อง",
+        ephemeral: true,
+      });
     }
 
-    const [type, code] = raw.split(":");
-    if (!type || !code) {
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: "❌ รูปแบบแพ็กไม่ถูกต้อง ลองใหม่อีกครั้งนะคะ", ephemeral: true });
-      }
-      return;
-    }
+    const modal = buildDonateModal(packageKey);
+    return interaction.showModal(modal);
 
-    const modal = new ModalBuilder()
-      .setCustomId(`order_create:${type}:${code}`)
-      .setTitle(`Order - ${type}:${code}`);
-
-    const ign = new TextInputBuilder()
-      .setCustomId("ign")
-      .setLabel("IGN (ชื่อตัวละคร)")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    const steam = new TextInputBuilder()
-      .setCustomId("steam")
-      .setLabel("SteamID (17 หลัก)")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    const note = new TextInputBuilder()
-      .setCustomId("note")
-      .setLabel("หมายเหตุ (optional)")
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(false);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(ign),
-      new ActionRowBuilder().addComponents(steam),
-      new ActionRowBuilder().addComponents(note),
-    );
-
-    // สำคัญ: showModal ต้องทำให้เร็วที่สุด และต้อง catch error ไม่ให้โปรเซสล้ม
-    await interaction.showModal(modal);
   } catch (err) {
-    // กัน Unknown interaction (10062) / ตอบไม่ทัน 3 วิ / ตอบซ้ำ
     console.error("openOrderModal error:", err);
 
-    const msg = "❌ ระบบตอบช้าไปนิดนึง ลองเลือกแพ็กอีกครั้งนะคะ";
-
-    try {
-      // ถ้ายังตอบได้ ให้ส่ง ephemeral แจ้งผู้ใช้
-      if (interaction.deferred || interaction.replied) {
-        await interaction.followUp({ content: msg, ephemeral: true });
-      } else {
-        await interaction.reply({ content: msg, ephemeral: true });
-      }
-    } catch {
-      // ถ้าตอบไม่ได้แล้วก็ปล่อย (interaction หมดอายุจริง)
+    // ถ้า error หลังจาก interaction หมดอายุ ก็ reply ไม่ได้แล้ว
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "❌ เปิดฟอร์มไม่สำเร็จ (interaction หมดอายุ/ถูกใช้ไปแล้ว) ลองใหม่อีกครั้ง",
+        ephemeral: true,
+      }).catch(() => {});
     }
   }
 }
+
+module.exports = { openOrderModal };
