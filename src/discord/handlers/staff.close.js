@@ -9,6 +9,8 @@ import { IDS } from "../../config/constants.js";
 import { collectAllAttachments } from "../utils/attachments.js";
 import { safeReply } from "../utils/messages.js";
 import { buildVehicleCard } from "../panels/vehicleCard.js";
+import { VIP_PACKS } from "../../domain/catalog.js";
+
 
 function requiredPlatesForDonate(order) {
   const p = DONATE_PACKS[order.pack_code];
