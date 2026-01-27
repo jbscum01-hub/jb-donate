@@ -1,28 +1,79 @@
+// src/discord/handlers/staff.close.js
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VehiclesRepo } from "../../db/repo/vehicles.repo.js";
 import { InsuranceRepo } from "../../db/repo/insurance.repo.js";
 import { AuditRepo } from "../../db/repo/audit.repo.js";
 import { DONATE_PACKS } from "../../domain/catalog.js";
-import { addDays } from "../../domain/time.js";
 import { IDS } from "../../config/constants.js";
 import { collectAllAttachments } from "../utils/attachments.js";
 import { safeReply } from "../utils/messages.js";
 import { buildVehicleCard } from "../panels/vehicleCard.js";
 
-function needPlate(order) {
-  // Needs plate if it has vehicle/boat selection OR donate pack has any insurance
-  if (order.type !== "DONATE") return false;
-  const p = DONATE_PACKS[order.pack_code];
-  const hasVehicle = Boolean(order.selected_vehicle || order.selected_boat);
-  const hasInsurance = Boolean(p?.carInsurance || p?.boatInsurance);
-  return hasVehicle || hasInsurance;
+function requiredKindsForDonate(order) {
+  const p = DONATE_PACKS?.[order.pack_code];
+  const needCar = Boolean(p?.vehicleChoices?.length);
+  const needBoat = Boolean(p?.boatChoices?.length);
+  return { needCar, needBoat, pack: p };
+}
+
+function validateModelSelection(order) {
+  if (order.type !== "DONATE") return { ok: true };
+
+  const { needCar, needBoat, pack: p } = requiredKindsForDonate(order);
+  if (!p) return { ok: false, msg: "❌ ไม่พบข้อมูลแพ็กในระบบ (catalog)" };
+
+  if (needCar && needBoat) {
+    if (!order.selected_vehicle && !order.selected_boat) {
+      return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **รถ 1 คัน** และ **เรือ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
+    }
+    if (!order.selected_vehicle) return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **รถ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
+    if (!order.selected_boat) return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **เรือ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
+  } else if (needCar) {
+    if (!order.selected_vehicle) return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **รถ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
+  } else if (needBoat) {
+    if (!order.selected_boat) return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **เรือ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
+  }
+
+  return { ok: true };
+}
+
+function requiredPlatesForDonate(order) {
+  const p = DONATE_PACKS?.[order.pack_code];
+
+  // plate required if pack has insurance for that kind OR that kind is selected
+  const requireCar = Boolean(order.selected_vehicle) || Boolean(p?.carInsurance);
+  const requireBoat = Boolean(order.selected_boat) || Boolean(p?.boatInsurance);
+
+  return { requireCar, requireBoat, pack: p };
+}
+
+async function refreshVehicleCard(client, plate, kind) {
+  if (!plate) return;
+
+  const v = await VehiclesRepo.getByPlate(plate);
+  if (!v?.plate_card_message_id) return;
+
+  const plateLogCh = await client.channels.fetch(IDS.VEHICLE_PLATE_LOG_CHANNEL_ID);
+  const msg = await plateLogCh.messages.fetch(v.plate_card_message_id).catch(() => null);
+  if (!msg) return;
+
+  const ins = await InsuranceRepo.getInsurance(plate, kind);
+  await msg.edit(buildVehicleCard({
+    plate,
+    kind,
+    model: v.model,
+    ownerUserId: v.owner_user_id,
+    ownerTag: v.owner_tag,
+    insurance: ins,
+  }));
 }
 
 export async function closeOrder(interaction) {
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }
+
   const orderNo = interaction.customId.split(":")[1];
   const order = await OrdersRepo.getByNo(orderNo);
   if (!order) return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
@@ -31,61 +82,85 @@ export async function closeOrder(interaction) {
     return safeReply(interaction, { content: "❌ ต้อง APPROVE ก่อนจึงจะ CLOSE ได้", ephemeral: true });
   }
 
-  if (needPlate(order) && !order.plate) {
-    return safeReply(interaction, { content: "❌ ต้อง SET PLATE (ทะเบียน 6 หลัก) ก่อนปิดงาน", ephemeral: true });
+  // ✅ NEW: enforce model completeness before CLOSE
+  const vm = validateModelSelection(order);
+  if (!vm.ok) return safeReply(interaction, { content: vm.msg, ephemeral: true });
+
+  // ===== Validate plates (Rule A) =====
+  if (order.type === "DONATE") {
+    const { requireCar, requireBoat } = requiredPlatesForDonate(order);
+
+    if (requireCar && !order.car_plate) {
+      return safeReply(interaction, { content: "❌ ต้อง SET CAR PLATE (ทะเบียนรถ 6 หลัก) ก่อนปิดงาน", ephemeral: true });
+    }
+    if (requireBoat && !order.boat_plate) {
+      return safeReply(interaction, { content: "❌ ต้อง SET BOAT PLATE (ทะเบียนเรือ 6 หลัก) ก่อนปิดงาน", ephemeral: true });
+    }
   }
 
-  // Grant insurance to plate at CLOSE (per your workflow)
-  if (order.type === "DONATE" && order.plate) {
-    const p = DONATE_PACKS[order.pack_code];
-    const plate = order.plate;
+  // ===== Grant insurance at CLOSE (DONATE only) =====
+  if (order.type === "DONATE") {
+    const { pack: p } = requiredPlatesForDonate(order);
 
-    // Ensure vehicle record exists (SET PLATE should have created it)
-    const vehicle = await VehiclesRepo.getByPlate(plate);
-    const kindCar = "CAR";
-    const kindBoat = "BOAT";
-
-    const now = new Date();
+    // CAR insurance
     if (p?.carInsurance) {
-      const expireAt = addDays(now, p.carInsurance.days);
-      const current = await InsuranceRepo.getInsurance(plate, kindCar);
-      const total = p.carInsurance.total;
-      const used = current?.used ?? 0;
-      await InsuranceRepo.upsertInsurance({ plate, kind: kindCar, total, used, expire_at: expireAt, order_no: orderNo, source: "DONATE_PACK" });
-      await InsuranceRepo.log({ guild_id: interaction.guildId, plate, kind: kindCar, action: "GRANT", delta: total, order_no: orderNo, user_id: order.user_id, staff_id: interaction.user.id, note: "grant at CLOSE" });
-    }
-    if (p?.boatInsurance) {
-      const expireAt = addDays(now, p.boatInsurance.days);
-      const current = await InsuranceRepo.getInsurance(plate, kindBoat);
-      const total = p.boatInsurance.total;
-      const used = current?.used ?? 0;
-      await InsuranceRepo.upsertInsurance({ plate, kind: kindBoat, total, used, expire_at: expireAt, order_no: orderNo, source: "DONATE_PACK" });
-      await InsuranceRepo.log({ guild_id: interaction.guildId, plate, kind: kindBoat, action: "GRANT", delta: total, order_no: orderNo, user_id: order.user_id, staff_id: interaction.user.id, note: "grant at CLOSE" });
+      await InsuranceRepo.upsertInsurance({
+        plate: order.car_plate,
+        kind: "CAR",
+        add_total: p.carInsurance.total,
+        days: p.carInsurance.days,
+        order_no: orderNo,
+        source: "DONATE_PACK",
+      });
+
+      await InsuranceRepo.log({
+        guild_id: interaction.guildId,
+        plate: order.car_plate,
+        kind: "CAR",
+        action: "GRANT",
+        delta: p.carInsurance.total,
+        order_no: orderNo,
+        user_id: order.user_id,
+        staff_id: interaction.user.id,
+        note: `grant at CLOSE (DONATE:${order.pack_code})`,
+      });
+
+      await refreshVehicleCard(interaction.client, order.car_plate, "CAR");
     }
 
-    // Refresh vehicle card in plate log channel
-    if (vehicle?.plate_card_message_id) {
-      const plateLogCh = await interaction.client.channels.fetch(IDS.VEHICLE_PLATE_LOG_CHANNEL_ID);
-      const msg = await plateLogCh.messages.fetch(vehicle.plate_card_message_id).catch(() => null);
-      if (msg) {
-        const ins = await InsuranceRepo.getInsurance(plate, vehicle.kind);
-        await msg.edit(buildVehicleCard({
-          plate,
-          kind: vehicle.kind,
-          model: vehicle.model,
-          ownerUserId: vehicle.owner_user_id,
-          ownerTag: vehicle.owner_tag,
-          insurance: ins,
-        }));
-      }
+    // BOAT insurance
+    if (p?.boatInsurance) {
+      await InsuranceRepo.upsertInsurance({
+        plate: order.boat_plate,
+        kind: "BOAT",
+        add_total: p.boatInsurance.total,
+        days: p.boatInsurance.days,
+        order_no: orderNo,
+        source: "DONATE_PACK",
+      });
+
+      await InsuranceRepo.log({
+        guild_id: interaction.guildId,
+        plate: order.boat_plate,
+        kind: "BOAT",
+        action: "GRANT",
+        delta: p.boatInsurance.total,
+        order_no: orderNo,
+        user_id: order.user_id,
+        staff_id: interaction.user.id,
+        note: `grant at CLOSE (DONATE:${order.pack_code})`,
+      });
+
+      await refreshVehicleCard(interaction.client, order.boat_plate, "BOAT");
     }
   }
 
-  // Archive attachments (all)
+  // ===== Archive attachments =====
   const ticketCh = interaction.channel;
   const attachments = await collectAllAttachments(ticketCh);
 
   const archiveCh = await interaction.client.channels.fetch(IDS.SLIP_ARCHIVE_CHANNEL_ID);
+
   const summary = [
     "🧾 **TICKET SUMMARY (SUCCESS)**",
     `Order: **${order.order_no}**`,
@@ -93,20 +168,21 @@ export async function closeOrder(interaction) {
     `IGN: ${order.ign}`,
     `SteamID: ${order.steam_id}`,
     `Pack: ${order.type}:${order.pack_code} (${order.amount}฿)`,
-    `Plate: ${order.plate ?? "-"}`,
+    `🚗 CAR: ${order.selected_vehicle ?? "-"}`,
+    `🚤 BOAT: ${order.selected_boat ?? "-"}`,
+    `CAR PLATE: ${order.car_plate ?? "-"}`,
+    `BOAT PLATE: ${order.boat_plate ?? "-"}`,
     `Staff: <@${interaction.user.id}>`,
-    `Time: <t:${Math.floor(Date.now()/1000)}:f>`,
+    `Time: <t:${Math.floor(Date.now() / 1000)}:f>`,
   ].join("\n");
 
-  // Send summary + attachments (URLs)
-  // Discord has file upload limits; we forward URLs to the archived message.
   const attachList = attachments.length
     ? attachments.map(a => `- ${a.name} (${a.contentType ?? "file"}): ${a.url}`).join("\n")
     : "- (no attachments)";
 
   await archiveCh.send(summary + "\n\n**Attachments:**\n" + attachList);
 
-  // Update order status
+  // ===== Update order status =====
   await OrdersRepo.setStatus(orderNo, "SUCCESS", interaction.user.id);
 
   await AuditRepo.add({
@@ -115,10 +191,16 @@ export async function closeOrder(interaction) {
     actor_tag: interaction.user.tag,
     action: "ORDER_CLOSE_SUCCESS",
     target: orderNo,
-    meta: { plate: order.plate ?? null, attachments: attachments.length },
+    meta: {
+      selected_vehicle: order.selected_vehicle ?? null,
+      selected_boat: order.selected_boat ?? null,
+      car_plate: order.car_plate ?? null,
+      boat_plate: order.boat_plate ?? null,
+      attachments: attachments.length
+    },
   });
 
-  // DM user (best effort)
+  // ===== DM user (best effort) =====
   try {
     const u = await interaction.client.users.fetch(order.user_id);
     await u.send(`✅ ออเดอร์ ${orderNo} สำเร็จแล้ว ขอบคุณสำหรับการสนับสนุน ❤️`);
@@ -126,6 +208,5 @@ export async function closeOrder(interaction) {
 
   await safeReply(interaction, { content: "✅ ปิดงานสำเร็จ กำลังลบห้อง…", ephemeral: true });
 
-  // Delete channel
-  await ticketCh.delete("Ticket closed SUCCESS").catch(()=>{});
+  await ticketCh.delete("Ticket closed SUCCESS").catch(() => {});
 }
