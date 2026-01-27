@@ -3,15 +3,33 @@ import { pool } from "../pool.js";
 import { SQL } from "../queries.js";
 
 export const InsuranceRepo = {
+  /**
+   * Upsert insurance by ACCUMULATING totals and EXTENDING expiry.
+   * Required fields:
+   * - plate: string
+   * - kind: 'CAR' | 'BOAT'
+   * - add_total: number  (how many to add)
+   * - days: number       (how many days to extend; MUST be > 0 for insurance packs)
+   *
+   * Optional:
+   * - order_no, source
+   *
+   * Note: used is NOT overwritten on updates.
+   */
   async upsertInsurance(i) {
+    const addTotal = Number(i.add_total ?? i.total ?? 0);
+    const days = Number(i.days ?? 0);
+
     const { rows } = await pool.query(SQL.upsertVehicleInsurance, [
       i.plate,
       i.kind,
-      i.add_total,
-      i.days,
+      addTotal,
+      0,                 // used initial (only used on first insert)
+      days,              // days_to_add (controls expire_at)
       i.order_no ?? null,
       i.source ?? "DONATE_PACK",
     ]);
+
     return rows[0];
   },
 

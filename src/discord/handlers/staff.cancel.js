@@ -1,3 +1,4 @@
+// src/discord/handlers/staff.cancel.js
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { AuditRepo } from "../../db/repo/audit.repo.js";
@@ -9,14 +10,20 @@ export async function cancelOrder(interaction) {
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }
+
   const orderNo = interaction.customId.split(":")[1];
   const order = await OrdersRepo.getByNo(orderNo);
   if (!order) return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
 
+  if (order.status === "SUCCESS" || order.status === "CANCELLED") {
+    return safeReply(interaction, { content: `ℹ️ สถานะปัจจุบัน: ${order.status}`, ephemeral: true });
+  }
+
+  // Archive attachments before delete
   const ticketCh = interaction.channel;
   const attachments = await collectAllAttachments(ticketCh);
-
   const archiveCh = await interaction.client.channels.fetch(IDS.SLIP_ARCHIVE_CHANNEL_ID);
+
   const summary = [
     "🧾 **TICKET SUMMARY (CANCELLED)**",
     `Order: **${order.order_no}**`,
@@ -24,9 +31,10 @@ export async function cancelOrder(interaction) {
     `IGN: ${order.ign}`,
     `SteamID: ${order.steam_id}`,
     `Pack: ${order.type}:${order.pack_code} (${order.amount}฿)`,
-    `Plate: ${order.plate ?? "-"}`,
+    `CAR PLATE: ${order.car_plate ?? "-"}`,
+    `BOAT PLATE: ${order.boat_plate ?? "-"}`,
     `Staff: <@${interaction.user.id}>`,
-    `Time: <t:${Math.floor(Date.now()/1000)}:f>`,
+    `Time: <t:${Math.floor(Date.now() / 1000)}:f>`,
   ].join("\n");
 
   const attachList = attachments.length
@@ -46,11 +54,6 @@ export async function cancelOrder(interaction) {
     meta: { attachments: attachments.length },
   });
 
-  try {
-    const u = await interaction.client.users.fetch(order.user_id);
-    await u.send(`❌ ออเดอร์ ${orderNo} ถูกยกเลิกแล้ว หากมีข้อสงสัยทักทีมงานได้เลย`);
-  } catch {}
-
-  await safeReply(interaction, { content: "✅ ยกเลิกงานแล้ว กำลังลบห้อง…", ephemeral: true });
-  await ticketCh.delete("Ticket cancelled").catch(()=>{});
+  await safeReply(interaction, { content: "❌ ยกเลิกออเดอร์แล้ว กำลังลบห้อง…", ephemeral: true });
+  await ticketCh.delete("Ticket cancelled").catch(() => {});
 }

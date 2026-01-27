@@ -1,37 +1,70 @@
 // src/db/queries.js
+// Centralized SQL strings for pg (Neon / Supabase Postgres)
+
 export const SQL = {
+  // =========================
   // Orders
+  // =========================
   insertOrder: `
-    insert into orders (order_no,guild_id,user_id,user_tag,type,pack_code,amount,ign,steam_id,note,ticket_channel_id,status)
-    values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'PENDING')
+    insert into orders (
+      order_no, guild_id, user_id, user_tag,
+      type, pack_code, amount,
+      ign, steam_id, note,
+      ticket_channel_id, status
+    )
+    values (
+      $1,$2,$3,$4,
+      $5,$6,$7,
+      $8,$9,$10,
+      $11,'PENDING'
+    )
     returning *
   `,
   getOrderByNo: `select * from orders where order_no=$1`,
   setOrderStatus: `
-    update orders set status=$2, staff_last_action_by=$3, staff_last_action_at=now()
-    where order_no=$1 returning *
+    update orders
+    set status=$2, staff_last_action_by=$3, staff_last_action_at=now()
+    where order_no=$1
+    returning *
   `,
   setOrderSelection: `
-    update orders set selected_vehicle=$2, selected_boat=$3
-    where order_no=$1 returning *
+    update orders
+    set selected_vehicle=$2, selected_boat=$3
+    where order_no=$1
+    returning *
   `,
-
   setOrderCarPlate: `
     update orders
-    set car_plate=$2, staff_last_action_by=$3, staff_last_action_at=now()
-    where order_no=$1 returning *
+    set car_plate=$2, plate_set_by=$3, plate_set_at=now(), staff_last_action_by=$3, staff_last_action_at=now()
+    where order_no=$1
+    returning *
   `,
   setOrderBoatPlate: `
     update orders
-    set boat_plate=$2, staff_last_action_by=$3, staff_last_action_at=now()
-    where order_no=$1 returning *
+    set boat_plate=$2, plate_set_by=$3, plate_set_at=now(), staff_last_action_by=$3, staff_last_action_at=now()
+    where order_no=$1
+    returning *
+  `,
+  // backward compatible (if some code still uses plate)
+  setOrderPlate: `
+    update orders
+    set plate=$2, plate_set_by=$3, plate_set_at=now(), staff_last_action_by=$3, staff_last_action_at=now()
+    where order_no=$1
+    returning *
+  `,
+  setOrderQueueMsg: `
+    update orders set queue_message_id=$2 where order_no=$1
   `,
 
-  setOrderQueueMsg: `update orders set queue_message_id=$2 where order_no=$1`,
-
+  // =========================
   // Vehicles
+  // =========================
   upsertVehicle: `
-    insert into vehicles (guild_id,plate,kind,model,owner_user_id,owner_tag,order_no,registered_by)
+    insert into vehicles (
+      guild_id, plate, kind, model,
+      owner_user_id, owner_tag, order_no,
+      registered_by
+    )
     values ($1,$2,$3,$4,$5,$6,$7,$8)
     on conflict (plate) do update set
       guild_id=excluded.guild_id,
@@ -49,36 +82,46 @@ export const SQL = {
     update vehicles set plate_card_message_id=$2 where plate=$1 returning *
   `,
 
-  // Insurance (ACCUMULATE + EXTEND EXPIRY)
+  // =========================
+  // Insurance
+  // RULE: insurance must always have expire_at (no NULL expire_at)
+  // - accumulate: total += add_total
+  // - keep used (do NOT reset used)
+  // - extend expiry from max(expire_at, now()) by days_to_add
+  //
   // params:
   // $1 plate
   // $2 kind
   // $3 add_total
-  // $4 days_to_add (>0)  NOTE: expire_at MUST be set/extended for all insurance packs
-  // $5 order_no
-  // $6 source
+  // $4 used_initial (0)
+  // $5 days_to_add (must be > 0 for insurance packs)
+  // $6 order_no
+  // $7 source
+  // =========================
   upsertVehicleInsurance: `
     insert into vehicle_insurance (plate,kind,total,used,expire_at,order_no,source)
     values (
       $1, $2,
       $3,
-      0,
-      (now() + ($4 || ' days')::interval),
-      $5, $6
+      $4,
+      (now() + ($5 || ' days')::interval),
+      $6, $7
     )
     on conflict (plate,kind) do update set
       total = vehicle_insurance.total + excluded.total,
       used  = vehicle_insurance.used,
       expire_at = (
         greatest(vehicle_insurance.expire_at, now())
-        + (($4 || ' days')::interval)
+        + (($5 || ' days')::interval)
       ),
       order_no = excluded.order_no,
       source   = excluded.source,
       updated_at = now()
     returning *
   `,
-  getVehicleInsurance: `select * from vehicle_insurance where plate=$1 and kind=$2`,
+  getVehicleInsurance: `
+    select * from vehicle_insurance where plate=$1 and kind=$2
+  `,
   useVehicleInsurance: `
     update vehicle_insurance
     set used = used + 1, updated_at=now()
@@ -93,7 +136,9 @@ export const SQL = {
     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
   `,
 
+  // =========================
   // Audit
+  // =========================
   insertAudit: `
     insert into audit_logs (guild_id,actor_id,actor_tag,action,target,meta)
     values ($1,$2,$3,$4,$5,$6)

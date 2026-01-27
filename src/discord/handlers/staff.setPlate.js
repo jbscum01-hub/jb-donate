@@ -10,23 +10,20 @@ import { IDS } from "../../config/constants.js";
 import { buildVehicleCard } from "../panels/vehicleCard.js";
 import { safeReply } from "../utils/messages.js";
 
-function parseKindOrder(interaction) {
-  // button: staff_set_plate:CAR:ORDERNO
-  // modal:  set_plate_modal:CAR:ORDERNO
-  const parts = interaction.customId.split(":");
-  if (interaction.isButton()) {
-    return { kind: parts[1], orderNo: parts[2] };
-  }
-  return { kind: parts[1], orderNo: parts[2] };
+function pickKindFromButton(customId) {
+  if (customId.startsWith("staff_set_car_plate:")) return "CAR";
+  if (customId.startsWith("staff_set_boat_plate:")) return "BOAT";
+  return null;
 }
 
 export async function setPlate(interaction) {
-  // Button opens modal
+  // Button opens modal; modal submit saves plate.
   if (interaction.isButton()) {
     if (!isAdmin(interaction.member)) {
       return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
     }
-    const { kind, orderNo } = parseKindOrder(interaction);
+    const orderNo = interaction.customId.split(":")[1];
+    const kind = pickKindFromButton(interaction.customId) ?? "CAR";
 
     const modal = new ModalBuilder()
       .setCustomId(`set_plate_modal:${kind}:${orderNo}`)
@@ -34,7 +31,7 @@ export async function setPlate(interaction) {
 
     const plate = new TextInputBuilder()
       .setCustomId("plate")
-      .setLabel("ทะเบียน (ตัวเลข 6 หลัก)")
+      .setLabel(kind === "BOAT" ? "ทะเบียนเรือ (ตัวเลข 6 หลัก)" : "ทะเบียนรถ (ตัวเลข 6 หลัก)")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
@@ -47,10 +44,9 @@ export async function setPlate(interaction) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }
 
-  const { kind, orderNo } = parseKindOrder(interaction);
-  if (kind !== "CAR" && kind !== "BOAT") {
-    return safeReply(interaction, { content: "❌ ประเภทไม่ถูกต้อง (ต้องเป็น CAR/BOAT)", ephemeral: true });
-  }
+  const parts = interaction.customId.split(":"); // set_plate_modal:KIND:ORDERNO
+  const kind = (parts[1] === "BOAT") ? "BOAT" : "CAR";
+  const orderNo = parts[2];
 
   const plate = interaction.fields.getTextInputValue("plate").trim();
   if (!isPlate6(plate)) {
@@ -60,27 +56,22 @@ export async function setPlate(interaction) {
   const order = await OrdersRepo.getByNo(orderNo);
   if (!order) return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
 
-  // ต้องเลือก model ของ kind นั้นก่อน (กัน Unknown)
-  if (kind === "CAR" && !order.selected_vehicle) {
-    return safeReply(interaction, { content: "❌ ต้องเลือก ‘รถ’ ก่อนจึงจะ SET CAR PLATE ได้", ephemeral: true });
-  }
-  if (kind === "BOAT" && !order.selected_boat) {
-    return safeReply(interaction, { content: "❌ ต้องเลือก ‘เรือ’ ก่อนจึงจะ SET BOAT PLATE ได้", ephemeral: true });
-  }
+  const model =
+    kind === "BOAT"
+      ? (order.selected_boat ?? order.boat_model ?? "Unknown")
+      : (order.selected_vehicle ?? order.vehicle_model ?? "Unknown");
 
-  // Ensure unique plate (ไม่ซ้ำ)
+  // Ensure unique plate:
   const existing = await VehiclesRepo.getByPlate(plate);
-  if (existing && existing.owner_user_id !== order.user_id) {
-    return safeReply(interaction, { content: `❌ ทะเบียน ${plate} ถูกใช้งานแล้ว (ไม่ซ้ำ)`, ephemeral: true });
+  if (existing && existing.owner_user_id && existing.owner_user_id !== order.user_id) {
+    return safeReply(interaction, { content: `❌ ทะเบียน ${plate} ถูกใช้งานแล้ว`, ephemeral: true });
   }
 
   // Save to order
-  if (kind === "CAR") await OrdersRepo.setCarPlate(orderNo, plate, interaction.user.id);
-  else await OrdersRepo.setBoatPlate(orderNo, plate, interaction.user.id);
+  if (kind === "BOAT") await OrdersRepo.setBoatPlate(orderNo, plate, interaction.user.id);
+  else await OrdersRepo.setCarPlate(orderNo, plate, interaction.user.id);
 
-  // Upsert vehicles
-  const model = kind === "CAR" ? order.selected_vehicle : order.selected_boat;
-
+  // Upsert vehicle registry
   const v = await VehiclesRepo.upsert({
     guild_id: interaction.guildId,
     plate,
@@ -92,7 +83,7 @@ export async function setPlate(interaction) {
     registered_by: interaction.user.id,
   });
 
-  // Build & upsert vehicle card
+  // Load insurance (if any) and (re)render card
   const ins = await InsuranceRepo.getInsurance(plate, kind);
   const payload = buildVehicleCard({
     plate,
@@ -130,5 +121,8 @@ export async function setPlate(interaction) {
     meta: { order_no: orderNo, kind, model, vehicle_card_message_id: messageId },
   });
 
-  return safeReply(interaction, { content: `✅ บันทึกทะเบียน ${plate} (${kind}) และอัปเดต Vehicle Card แล้ว`, ephemeral: true });
+  return safeReply(interaction, {
+    content: `✅ บันทึกทะเบียน ${plate} (${kind}) และอัปเดต Vehicle Card แล้ว`,
+    ephemeral: true
+  });
 }

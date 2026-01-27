@@ -10,31 +10,13 @@ import { collectAllAttachments } from "../utils/attachments.js";
 import { safeReply } from "../utils/messages.js";
 import { buildVehicleCard } from "../panels/vehicleCard.js";
 
-function requiredKindsForDonate(order) {
-  const p = DONATE_PACKS?.[order.pack_code];
-  const needCar = Boolean(p?.vehicleChoices?.length);
-  const needBoat = Boolean(p?.boatChoices?.length);
-  return { needCar, needBoat, pack: p };
-}
-
-function validateModelSelection(order) {
-  if (order.type !== "DONATE") return { ok: true };
-
-  const { needCar, needBoat, pack: p } = requiredKindsForDonate(order);
-  if (!p) return { ok: false, msg: "❌ ไม่พบข้อมูลแพ็กในระบบ (catalog)" };
-
-  if (needCar && !order.selected_vehicle) return { ok: false, msg: "❌ ต้องเลือก ‘รถ’ ก่อนจึงจะ CLOSE ได้" };
-  if (needBoat && !order.selected_boat) return { ok: false, msg: "❌ ต้องเลือก ‘เรือ’ ก่อนจึงจะ CLOSE ได้" };
-
-  return { ok: true };
-}
-
 function requiredPlatesForDonate(order) {
-  const p = DONATE_PACKS?.[order.pack_code];
+  const p = DONATE_PACKS[order.pack_code];
 
-  // plate required if that kind is selected OR pack has insurance for that kind
-  const requireCar = Boolean(order.selected_vehicle) || Boolean(p?.carInsurance);
-  const requireBoat = Boolean(order.selected_boat) || Boolean(p?.boatInsurance);
+  const requireCar =
+    Boolean(order.selected_vehicle) || Boolean(p?.carInsurance);
+  const requireBoat =
+    Boolean(order.selected_boat) || Boolean(p?.boatInsurance);
 
   return { requireCar, requireBoat, pack: p };
 }
@@ -73,33 +55,42 @@ export async function closeOrder(interaction) {
     return safeReply(interaction, { content: "❌ ต้อง APPROVE ก่อนจึงจะ CLOSE ได้", ephemeral: true });
   }
 
-  // ✅ enforce model completeness
-  const vm = validateModelSelection(order);
-  if (!vm.ok) return safeReply(interaction, { content: vm.msg, ephemeral: true });
-
-  // ✅ enforce plates when required
+  // ===== Validate plates (Rule A) =====
   if (order.type === "DONATE") {
     const { requireCar, requireBoat } = requiredPlatesForDonate(order);
 
     if (requireCar && !order.car_plate) {
-      return safeReply(interaction, { content: "❌ ต้อง SET CAR PLATE (ทะเบียนรถ 6 หลัก) ก่อนปิดงาน", ephemeral: true });
+      return safeReply(interaction, {
+        content: "❌ ต้อง SET CAR PLATE (ทะเบียนรถ 6 หลัก) ก่อนปิดงาน",
+        ephemeral: true
+      });
     }
     if (requireBoat && !order.boat_plate) {
-      return safeReply(interaction, { content: "❌ ต้อง SET BOAT PLATE (ทะเบียนเรือ 6 หลัก) ก่อนปิดงาน", ephemeral: true });
+      return safeReply(interaction, {
+        content: "❌ ต้อง SET BOAT PLATE (ทะเบียนเรือ 6 หลัก) ก่อนปิดงาน",
+        ephemeral: true
+      });
     }
   }
 
-  // ✅ Grant insurance at CLOSE (DONATE only)
+  // ===== Grant insurance at CLOSE (DONATE only) =====
   if (order.type === "DONATE") {
     const { pack: p } = requiredPlatesForDonate(order);
 
     // CAR insurance
     if (p?.carInsurance) {
+      if (!order.car_plate) {
+        return safeReply(interaction, {
+          content: "❌ แพ็กนี้มีประกันรถ ต้อง SET CAR PLATE ก่อน",
+          ephemeral: true
+        });
+      }
+
       await InsuranceRepo.upsertInsurance({
         plate: order.car_plate,
         kind: "CAR",
-        add_total: p.carInsurance.total,  // ✅ accumulate
-        days: p.carInsurance.days,        // ✅ extend expire
+        add_total: p.carInsurance.total,   // ✅ accumulate
+        days: p.carInsurance.days,         // ✅ extend expiry
         order_no: orderNo,
         source: "DONATE_PACK",
       });
@@ -121,11 +112,18 @@ export async function closeOrder(interaction) {
 
     // BOAT insurance
     if (p?.boatInsurance) {
+      if (!order.boat_plate) {
+        return safeReply(interaction, {
+          content: "❌ แพ็กนี้มีประกันเรือ ต้อง SET BOAT PLATE ก่อน",
+          ephemeral: true
+        });
+      }
+
       await InsuranceRepo.upsertInsurance({
         plate: order.boat_plate,
         kind: "BOAT",
-        add_total: p.boatInsurance.total, // ✅ accumulate
-        days: p.boatInsurance.days,       // ✅ extend expire
+        add_total: p.boatInsurance.total,  // ✅ accumulate
+        days: p.boatInsurance.days,        // ✅ extend expiry
         order_no: orderNo,
         source: "DONATE_PACK",
       });
@@ -146,11 +144,12 @@ export async function closeOrder(interaction) {
     }
   }
 
-  // ===== Archive attachments =====
+  // ===== Archive attachments (all) =====
   const ticketCh = interaction.channel;
   const attachments = await collectAllAttachments(ticketCh);
 
   const archiveCh = await interaction.client.channels.fetch(IDS.SLIP_ARCHIVE_CHANNEL_ID);
+
   const summary = [
     "🧾 **TICKET SUMMARY (SUCCESS)**",
     `Order: **${order.order_no}**`,
@@ -158,8 +157,6 @@ export async function closeOrder(interaction) {
     `IGN: ${order.ign}`,
     `SteamID: ${order.steam_id}`,
     `Pack: ${order.type}:${order.pack_code} (${order.amount}฿)`,
-    `🚗 CAR: ${order.selected_vehicle ?? "-"}`,
-    `🚤 BOAT: ${order.selected_boat ?? "-"}`,
     `CAR PLATE: ${order.car_plate ?? "-"}`,
     `BOAT PLATE: ${order.boat_plate ?? "-"}`,
     `Staff: <@${interaction.user.id}>`,
@@ -182,11 +179,9 @@ export async function closeOrder(interaction) {
     action: "ORDER_CLOSE_SUCCESS",
     target: orderNo,
     meta: {
-      selected_vehicle: order.selected_vehicle ?? null,
-      selected_boat: order.selected_boat ?? null,
       car_plate: order.car_plate ?? null,
       boat_plate: order.boat_plate ?? null,
-      attachments: attachments.length,
+      attachments: attachments.length
     },
   });
 
@@ -197,5 +192,6 @@ export async function closeOrder(interaction) {
   } catch {}
 
   await safeReply(interaction, { content: "✅ ปิดงานสำเร็จ กำลังลบห้อง…", ephemeral: true });
+
   await ticketCh.delete("Ticket closed SUCCESS").catch(() => {});
 }

@@ -1,27 +1,36 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from "discord.js";
-import { formatDateTime } from "../../domain/time.js";
+// src/discord/panels/vehicleCard.js
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 export function buildVehicleCard({ plate, kind, model, ownerUserId, ownerTag, insurance }) {
-  const remain = insurance ? Math.max(insurance.total - insurance.used, 0) : 0;
-
   const embed = new EmbedBuilder()
-    .setTitle(kind === "BOAT" ? "🚤 Vehicle Card" : "🚗 Vehicle Card")
-    .setDescription(`ทะเบียน: **${plate}**`)
+    .setTitle(`🚗 Vehicle Card`)
     .addFields(
-      { name: "Owner", value: `<@${ownerUserId}> (${ownerTag})`, inline: false },
-      { name: "Model", value: model, inline: true },
+      { name: "ทะเบียน", value: plate, inline: true },
       { name: "Kind", value: kind, inline: true },
-      { name: "Insurance", value: insurance
-          ? `เหลือ **${remain}** / รวม ${insurance.total}\nหมดอายุ: **${formatDateTime(insurance.expire_at)}**`
-          : "ไม่มีประกัน", inline: false
-      },
+      { name: "Model", value: model ?? "-", inline: true },
+      { name: "Owner", value: `<@${ownerUserId}> (${ownerTag})`, inline: false },
     );
 
+  if (!insurance) {
+    embed.addFields({ name: "Insurance", value: "ไม่มีประกัน", inline: false });
+  } else {
+    const remain = Math.max(0, (insurance.total ?? 0) - (insurance.used ?? 0));
+    const exp = insurance.expire_at ? `<t:${Math.floor(new Date(insurance.expire_at).getTime()/1000)}:f>` : "-";
+    embed.addFields(
+      { name: "Insurance", value: `เหลือ **${remain}** / ทั้งหมด **${insurance.total}**`, inline: false },
+      { name: "Expire", value: exp, inline: true },
+    );
+  }
+
+  const remain = insurance ? Math.max(0, (insurance.total ?? 0) - (insurance.used ?? 0)) : 0;
   const btn = new ButtonBuilder()
     .setCustomId(`vehiclecard_useins:${plate}:${kind}`)
-    .setLabel(kind === "BOAT" ? "USE BOAT INSURANCE" : "USE CAR INSURANCE")
+    .setLabel("USE CAR INSURANCE")
     .setStyle(ButtonStyle.Primary)
     .setDisabled(!insurance || remain <= 0);
 
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(btn)] };
+  return {
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(btn)],
+  };
 }
