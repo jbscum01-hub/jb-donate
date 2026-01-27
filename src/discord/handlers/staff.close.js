@@ -165,9 +165,9 @@ export async function closeOrder(interaction) {
     }
 
     const VIP_INS = {
-      BASIC: { add_total: 1, days: 30 },
-      PRO:   { add_total: 3, days: 30 },
-      ELITE: { add_total: 9999, days: 30 },
+      BASIC: { add_total: 5, days: 30 },
+      PRO:   { add_total: 10, days: 30 },
+      ELITE: { add_total: 999, days: 30 },
     };
 
     const cfg = VIP_INS[order.pack_code];
