@@ -14,6 +14,18 @@ export const SQL = {
     update orders set selected_vehicle=$2, selected_boat=$3
     where order_no=$1 returning *
   `,
+    setOrderCarPlate: `
+    update orders
+    set car_plate=$2, staff_last_action_by=$3, staff_last_action_at=now()
+    where order_no=$1 returning *
+  `,
+
+  setOrderBoatPlate: `
+    update orders
+    set boat_plate=$2, staff_last_action_by=$3, staff_last_action_at=now()
+    where order_no=$1 returning *
+  `,
+
   setOrderPlate: `
     update orders set plate=$2, staff_last_action_by=$3, staff_last_action_at=now()
     where order_no=$1 returning *
