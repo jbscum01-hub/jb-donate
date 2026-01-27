@@ -99,22 +99,47 @@ export async function createOrderFromModal(interaction) {
 
   const components = [];
 
-  // model select (player chooses model) - only for DONATE packs
+  // model select (split CAR / BOAT)
   if (type === "DONATE") {
-    const p = pack; // resolved donate pack
-    const options = [];
+    const p = DONATE_PACKS[code];
 
-    for (const v of (p.vehicleChoices ?? [])) options.push({ label: `CAR: ${v}`, value: `CAR:${v}` });
-    for (const b of (p.boatChoices ?? [])) options.push({ label: `BOAT: ${b}`, value: `BOAT:${b}` });
+    // 1) CAR select
+    if ((p.vehicleChoices ?? []).length) {
+      const carOptions = (p.vehicleChoices ?? []).map(v => ({
+        label: v,
+        value: `CAR:${v}`,
+        description: "เลือกรถ 1 คัน"
+      }));
 
-    if (options.length) {
-      const select = new StringSelectMenuBuilder()
-        .setCustomId(`ticket_model_select:${orderNo}`)
-        .setPlaceholder("เลือก model รถ/เรือ (ถ้ามี)")
-        .addOptions(options);
-      components.push(new ActionRowBuilder().addComponents(select));
+      const carSelect = new StringSelectMenuBuilder()
+        .setCustomId(`ticket_model_select:${orderNo}`) // ใช้ handler เดิมได้
+        .setPlaceholder("🚗 เลือกรถ 1 คัน")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(carOptions);
+
+      components.push(new ActionRowBuilder().addComponents(carSelect));
+    }
+
+    // 2) BOAT select
+    if ((p.boatChoices ?? []).length) {
+      const boatOptions = (p.boatChoices ?? []).map(b => ({
+        label: b,
+        value: `BOAT:${b}`,
+        description: "เลือกเรือ 1 ลำ"
+      }));
+
+      const boatSelect = new StringSelectMenuBuilder()
+        .setCustomId(`ticket_model_select:${orderNo}`) // ใช้ handler เดิมได้
+        .setPlaceholder("🚤 เลือกเรือ 1 ลำ")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(boatOptions);
+
+      components.push(new ActionRowBuilder().addComponents(boatSelect));
     }
   }
+
 
   const staffRows = buildStaffPanel(orderNo);
 
