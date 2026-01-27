@@ -6,7 +6,9 @@ import { buildVehicleCard } from "../panels/vehicleCard.js";
 import { IDS } from "../../config/constants.js";
 import { safeReply } from "../utils/messages.js";
 
-export async function useInsuranceFromVehicleCard(interaction) {
+// Router expects a handler named `useInsuranceFromCard`.
+// Keep the more descriptive name too (backward compatible).
+export async function useInsuranceFromCard(interaction) {
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }
@@ -61,4 +63,9 @@ export async function useInsuranceFromVehicleCard(interaction) {
   } catch {}
 
   return safeReply(interaction, { content: `✅ ใช้ประกันสำเร็จ (ทะเบียน ${plate})`, ephemeral: true });
+}
+
+// Backward compatible named export (in case other files import the old name)
+export async function useInsuranceFromVehicleCard(interaction) {
+  return useInsuranceFromCard(interaction);
 }
