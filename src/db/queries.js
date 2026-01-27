@@ -1,40 +1,80 @@
 export const SQL = {
+  // ======================
   // Orders
+  // ======================
   insertOrder: `
-    insert into orders (order_no,guild_id,user_id,user_tag,type,pack_code,amount,ign,steam_id,note,ticket_channel_id,status)
+    insert into orders (
+      order_no,guild_id,user_id,user_tag,
+      type,pack_code,amount,
+      ign,steam_id,note,
+      ticket_channel_id,status
+    )
     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'PENDING')
     returning *
   `,
-  getOrderByNo: `select * from orders where order_no=$1`,
+
+  getOrderByNo: `
+    select * from orders where order_no=$1
+  `,
+
   setOrderStatus: `
-    update orders set status=$2, staff_last_action_by=$3, staff_last_action_at=now()
-    where order_no=$1 returning *
-  `,
-  setOrderSelection: `
-    update orders set selected_vehicle=$2, selected_boat=$3
-    where order_no=$1 returning *
-  `,
-    setOrderCarPlate: `
     update orders
-    set car_plate=$2, staff_last_action_by=$3, staff_last_action_at=now()
-    where order_no=$1 returning *
+    set status=$2,
+        staff_last_action_by=$3,
+        staff_last_action_at=now()
+    where order_no=$1
+    returning *
+  `,
+
+  setOrderSelection: `
+    update orders
+    set selected_vehicle=$2,
+        selected_boat=$3
+    where order_no=$1
+    returning *
+  `,
+
+  setOrderCarPlate: `
+    update orders
+    set car_plate=$2,
+        staff_last_action_by=$3,
+        staff_last_action_at=now()
+    where order_no=$1
+    returning *
   `,
 
   setOrderBoatPlate: `
     update orders
-    set boat_plate=$2, staff_last_action_by=$3, staff_last_action_at=now()
-    where order_no=$1 returning *
+    set boat_plate=$2,
+        staff_last_action_by=$3,
+        staff_last_action_at=now()
+    where order_no=$1
+    returning *
   `,
 
+  // legacy (ยังไม่ลบ เพื่อกันพัง)
   setOrderPlate: `
-    update orders set plate=$2, staff_last_action_by=$3, staff_last_action_at=now()
-    where order_no=$1 returning *
+    update orders
+    set plate=$2,
+        staff_last_action_by=$3,
+        staff_last_action_at=now()
+    where order_no=$1
+    returning *
   `,
-  setOrderQueueMsg: `update orders set queue_message_id=$2 where order_no=$1`,
 
+  setOrderQueueMsg: `
+    update orders set queue_message_id=$2 where order_no=$1
+  `,
+
+  // ======================
   // Vehicles
+  // ======================
   upsertVehicle: `
-    insert into vehicles (guild_id,plate,kind,model,owner_user_id,owner_tag,order_no,registered_by)
+    insert into vehicles (
+      guild_id,plate,kind,model,
+      owner_user_id,owner_tag,
+      order_no,registered_by
+    )
     values ($1,$2,$3,$4,$5,$6,$7,$8)
     on conflict (plate) do update set
       guild_id=excluded.guild_id,
@@ -47,23 +87,34 @@ export const SQL = {
       updated_at=now()
     returning *
   `,
-  getVehicleByPlate: `select * from vehicles where plate=$1`,
-  setVehicleCardMessageId: `
-    update vehicles set plate_card_message_id=$2 where plate=$1 returning *
+
+  getVehicleByPlate: `
+    select * from vehicles where plate=$1
   `,
 
-  // Insurance
-  // Insurance (ACCUMULATE + EXTEND EXPIRY; expire_at MUST exist for insurance packs)
+  setVehicleCardMessageId: `
+    update vehicles
+    set plate_card_message_id=$2
+    where plate=$1
+    returning *
+  `,
+
+  // ======================
+  // Insurance (ACCUMULATE + EXTEND EXPIRY)
+  // ======================
+
   // params:
   // $1 plate
   // $2 kind
   // $3 add_total
   // $4 used_initial (0)
-  // $5 days_to_add (must be > 0 for insurance packs)
+  // $5 days_to_add
   // $6 order_no
   // $7 source
   upsertVehicleInsurance: `
-    insert into vehicle_insurance (plate,kind,total,used,expire_at,order_no,source)
+    insert into vehicle_insurance (
+      plate,kind,total,used,expire_at,order_no,source
+    )
     values (
       $1, $2,
       $3,
@@ -83,9 +134,16 @@ export const SQL = {
       updated_at = now()
     returning *
   `,
+
+  getVehicleInsurance: `
+    select * from vehicle_insurance
+    where plate=$1 and kind=$2
+  `,
+
   useVehicleInsurance: `
     update vehicle_insurance
-    set used = used + 1, updated_at=now()
+    set used = used + 1,
+        updated_at=now()
     where plate=$1
       and kind=$2
       and expire_at > now()
@@ -94,13 +152,22 @@ export const SQL = {
   `,
 
   insertInsuranceLog: `
-    insert into insurance_logs (guild_id,plate,kind,action,delta,order_no,user_id,staff_id,note)
+    insert into insurance_logs (
+      guild_id,plate,kind,
+      action,delta,order_no,
+      user_id,staff_id,note
+    )
     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
   `,
 
-  // Audit
+  // ======================
+  // Audit Logs
+  // ======================
   insertAudit: `
-    insert into audit_logs (guild_id,actor_id,actor_tag,action,target,meta)
+    insert into audit_logs (
+      guild_id,actor_id,actor_tag,
+      action,target,meta
+    )
     values ($1,$2,$3,$4,$5,$6)
   `,
 };
