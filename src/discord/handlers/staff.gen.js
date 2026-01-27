@@ -44,7 +44,11 @@ function buildSpawnLines(order) {
   return lines;
 }
 
-export async function genOrder(interaction) {
+/**
+ * ปุ่ม: staff_gen:<orderNo>
+ * NOTE: ต้อง export ชื่อนี้ให้ตรงกับ router.js
+ */
+export async function genTemplate(interaction) {
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }
@@ -57,15 +61,13 @@ export async function genOrder(interaction) {
     return safeReply(interaction, { content: "❌ ต้อง APPROVE ก่อนจึงจะ GEN ได้", ephemeral: true });
   }
 
-  // ✅ NEW: enforce model completeness
+  // ✅ enforce model completeness
   const v = validateModelSelection(order);
   if (!v.ok) return safeReply(interaction, { content: v.msg, ephemeral: true });
 
-  // สร้างคำสั่ง spawn
   const spawnLines = buildSpawnLines(order);
 
-  // ถ้าแพ็กบังคับเลือก แต่ยังไม่มี command (กันกรณี model ไม่อยู่ใน map)
-  // (ปกติไม่ควรเกิด แต่กันพัง)
+  // กันกรณีเลือกแล้วแต่ไม่มี map ใน VEHICLE_COMMANDS
   if (order.type === "DONATE") {
     const p = DONATE_PACKS?.[order.pack_code];
     const needCar = Boolean(p?.vehicleChoices?.length);
@@ -74,18 +76,17 @@ export async function genOrder(interaction) {
     if ((needCar || needBoat) && spawnLines.length === 0) {
       return safeReply(interaction, {
         content: "❌ ไม่พบคำสั่ง Spawn ของ model ที่เลือก (VEHICLE_COMMANDS ไม่ตรง) กรุณาเช็ค config",
-        ephemeral: true
+        ephemeral: true,
       });
     }
   }
 
-  // ✅ ส่งลงห้องให้ทุกคนเห็น (public)
-  if (spawnLines.length) {
-    await interaction.channel.send({
-      content: [
+  // ✅ เปลี่ยนเป็นเห็นเฉพาะคนกด (ephemeral) ไม่ส่ง public ลงห้อง
+  const msg = spawnLines.length
+    ? [
         "📦 **GEN SPAWN COMMANDS**",
         `Order: **${orderNo}**`,
-        `By staff: <@${interaction.user.id}>`,
+        `Staff: <@${interaction.user.id}>`,
         order.selected_vehicle ? `🚗 CAR: **${order.selected_vehicle}**` : null,
         order.selected_boat ? `🚤 BOAT: **${order.selected_boat}**` : null,
         "",
@@ -93,12 +94,7 @@ export async function genOrder(interaction) {
         ...spawnLines,
         "```",
       ].filter(Boolean).join("\n")
-    }).catch(() => {});
-  } else {
-    await interaction.channel.send({
-      content: `ℹ️ Order **${orderNo}** ไม่มีรถ/เรือที่ต้อง GEN`
-    }).catch(() => {});
-  }
+    : `ℹ️ Order **${orderNo}** ไม่มีรถ/เรือที่ต้อง GEN`;
 
   await AuditRepo.add({
     guild_id: interaction.guildId,
@@ -113,5 +109,5 @@ export async function genOrder(interaction) {
     },
   });
 
-  return safeReply(interaction, { content: "✅ ส่งคำสั่ง GEN ลงห้องแล้ว", ephemeral: true });
+  return safeReply(interaction, { content: msg, ephemeral: true });
 }
