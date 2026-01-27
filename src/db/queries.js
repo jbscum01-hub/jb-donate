@@ -53,25 +53,46 @@ export const SQL = {
   `,
 
   // Insurance
+  // Insurance (ACCUMULATE + EXTEND EXPIRY; expire_at MUST exist for insurance packs)
+  // params:
+  // $1 plate
+  // $2 kind
+  // $3 add_total
+  // $4 used_initial (0)
+  // $5 days_to_add (must be > 0 for insurance packs)
+  // $6 order_no
+  // $7 source
   upsertVehicleInsurance: `
     insert into vehicle_insurance (plate,kind,total,used,expire_at,order_no,source)
-    values ($1,$2,$3,$4,$5,$6,$7)
+    values (
+      $1, $2,
+      $3,
+      $4,
+      (now() + ($5 || ' days')::interval),
+      $6, $7
+    )
     on conflict (plate,kind) do update set
-      total=excluded.total,
-      used=excluded.used,
-      expire_at=excluded.expire_at,
-      order_no=excluded.order_no,
-      source=excluded.source,
-      updated_at=now()
+      total = vehicle_insurance.total + excluded.total,
+      used  = vehicle_insurance.used,
+      expire_at = (
+        greatest(coalesce(vehicle_insurance.expire_at, now()), now())
+        + (($5 || ' days')::interval)
+      ),
+      order_no = excluded.order_no,
+      source   = excluded.source,
+      updated_at = now()
     returning *
   `,
-  getVehicleInsurance: `select * from vehicle_insurance where plate=$1 and kind=$2`,
   useVehicleInsurance: `
     update vehicle_insurance
     set used = used + 1, updated_at=now()
-    where plate=$1 and kind=$2 and (expire_at is null or expire_at > now()) and used < total
+    where plate=$1
+      and kind=$2
+      and expire_at > now()
+      and used < total
     returning *
   `,
+
   insertInsuranceLog: `
     insert into insurance_logs (guild_id,plate,kind,action,delta,order_no,user_id,staff_id,note)
     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
