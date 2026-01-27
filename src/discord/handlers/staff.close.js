@@ -23,17 +23,8 @@ function validateModelSelection(order) {
   const { needCar, needBoat, pack: p } = requiredKindsForDonate(order);
   if (!p) return { ok: false, msg: "❌ ไม่พบข้อมูลแพ็กในระบบ (catalog)" };
 
-  if (needCar && needBoat) {
-    if (!order.selected_vehicle && !order.selected_boat) {
-      return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **รถ 1 คัน** และ **เรือ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
-    }
-    if (!order.selected_vehicle) return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **รถ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
-    if (!order.selected_boat) return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **เรือ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
-  } else if (needCar) {
-    if (!order.selected_vehicle) return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **รถ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
-  } else if (needBoat) {
-    if (!order.selected_boat) return { ok: false, msg: "❌ แพ็กนี้ต้องเลือก **เรือ 1 คัน** ก่อนจึงจะ CLOSE ได้" };
-  }
+  if (needCar && !order.selected_vehicle) return { ok: false, msg: "❌ ต้องเลือก ‘รถ’ ก่อนจึงจะ CLOSE ได้" };
+  if (needBoat && !order.selected_boat) return { ok: false, msg: "❌ ต้องเลือก ‘เรือ’ ก่อนจึงจะ CLOSE ได้" };
 
   return { ok: true };
 }
@@ -41,7 +32,7 @@ function validateModelSelection(order) {
 function requiredPlatesForDonate(order) {
   const p = DONATE_PACKS?.[order.pack_code];
 
-  // plate required if pack has insurance for that kind OR that kind is selected
+  // plate required if that kind is selected OR pack has insurance for that kind
   const requireCar = Boolean(order.selected_vehicle) || Boolean(p?.carInsurance);
   const requireBoat = Boolean(order.selected_boat) || Boolean(p?.boatInsurance);
 
@@ -82,11 +73,11 @@ export async function closeOrder(interaction) {
     return safeReply(interaction, { content: "❌ ต้อง APPROVE ก่อนจึงจะ CLOSE ได้", ephemeral: true });
   }
 
-  // ✅ NEW: enforce model completeness before CLOSE
+  // ✅ enforce model completeness
   const vm = validateModelSelection(order);
   if (!vm.ok) return safeReply(interaction, { content: vm.msg, ephemeral: true });
 
-  // ===== Validate plates (Rule A) =====
+  // ✅ enforce plates when required
   if (order.type === "DONATE") {
     const { requireCar, requireBoat } = requiredPlatesForDonate(order);
 
@@ -98,7 +89,7 @@ export async function closeOrder(interaction) {
     }
   }
 
-  // ===== Grant insurance at CLOSE (DONATE only) =====
+  // ✅ Grant insurance at CLOSE (DONATE only)
   if (order.type === "DONATE") {
     const { pack: p } = requiredPlatesForDonate(order);
 
@@ -107,8 +98,8 @@ export async function closeOrder(interaction) {
       await InsuranceRepo.upsertInsurance({
         plate: order.car_plate,
         kind: "CAR",
-        add_total: p.carInsurance.total,
-        days: p.carInsurance.days,
+        add_total: p.carInsurance.total,  // ✅ accumulate
+        days: p.carInsurance.days,        // ✅ extend expire
         order_no: orderNo,
         source: "DONATE_PACK",
       });
@@ -133,8 +124,8 @@ export async function closeOrder(interaction) {
       await InsuranceRepo.upsertInsurance({
         plate: order.boat_plate,
         kind: "BOAT",
-        add_total: p.boatInsurance.total,
-        days: p.boatInsurance.days,
+        add_total: p.boatInsurance.total, // ✅ accumulate
+        days: p.boatInsurance.days,       // ✅ extend expire
         order_no: orderNo,
         source: "DONATE_PACK",
       });
@@ -160,7 +151,6 @@ export async function closeOrder(interaction) {
   const attachments = await collectAllAttachments(ticketCh);
 
   const archiveCh = await interaction.client.channels.fetch(IDS.SLIP_ARCHIVE_CHANNEL_ID);
-
   const summary = [
     "🧾 **TICKET SUMMARY (SUCCESS)**",
     `Order: **${order.order_no}**`,
@@ -196,7 +186,7 @@ export async function closeOrder(interaction) {
       selected_boat: order.selected_boat ?? null,
       car_plate: order.car_plate ?? null,
       boat_plate: order.boat_plate ?? null,
-      attachments: attachments.length
+      attachments: attachments.length,
     },
   });
 
@@ -207,6 +197,5 @@ export async function closeOrder(interaction) {
   } catch {}
 
   await safeReply(interaction, { content: "✅ ปิดงานสำเร็จ กำลังลบห้อง…", ephemeral: true });
-
   await ticketCh.delete("Ticket closed SUCCESS").catch(() => {});
 }
