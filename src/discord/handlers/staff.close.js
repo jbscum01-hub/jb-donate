@@ -146,6 +146,59 @@ export async function closeOrder(interaction) {
     }
   }
 
+    // ===== Grant insurance at CLOSE (VIP) =====
+  if (order.type === "VIP") {
+    // ต้องมีทะเบียนรถเพื่อผูกประกัน
+    if (!order.car_plate) {
+      return safeReply(interaction, {
+        content: "❌ VIP ต้อง SET CAR PLATE (ทะเบียนรถ 6 หลัก) ก่อนปิดงาน",
+        ephemeral: true
+      });
+    }
+
+    // ตั้งค่าประกัน VIP (ปรับเลข days ได้ตามต้องการ)
+    // - BASIC/PRO: เพิ่มตามแพ็ก
+    // - ELITE: unlimited -> +9999
+    const vip = VIP_PACKS[order.pack_code];
+    if (!vip) {
+      return safeReply(interaction, { content: "❌ ไม่พบ VIP PACK", ephemeral: true });
+    }
+
+    const VIP_INS = {
+      BASIC: { add_total: 1, days: 30 },
+      PRO:   { add_total: 3, days: 30 },
+      ELITE: { add_total: 9999, days: 30 },
+    };
+
+    const cfg = VIP_INS[order.pack_code];
+    if (!cfg) {
+      return safeReply(interaction, { content: "❌ VIP แพ็กนี้ยังไม่ตั้งค่า Insurance", ephemeral: true });
+    }
+
+    await InsuranceRepo.upsertInsurance({
+      plate: order.car_plate,
+      kind: "CAR",
+      add_total: cfg.add_total,  // ✅ สะสมเพิ่ม
+      days: cfg.days,            // ✅ มี expire_at ทุกแพ็ก
+      order_no: orderNo,
+      source: "VIP_PACK",
+    });
+
+    await InsuranceRepo.log({
+      guild_id: interaction.guildId,
+      plate: order.car_plate,
+      kind: "CAR",
+      action: "GRANT",
+      delta: cfg.add_total,
+      order_no: orderNo,
+      user_id: order.user_id,
+      staff_id: interaction.user.id,
+      note: `grant at CLOSE (VIP:${order.pack_code})`,
+    });
+
+    await refreshVehicleCard(interaction.client, order.car_plate, "CAR");
+  }
+
   // ===== Archive attachments (all) =====
   const ticketCh = interaction.channel;
   const attachments = await collectAllAttachments(ticketCh);
