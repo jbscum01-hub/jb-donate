@@ -21,6 +21,16 @@ export const OrdersRepo = {
     const { rows } = await pool.query(SQL.setOrderStatus, [orderNo, status, staffId]);
     return rows[0] ?? null;
   },
+  
+  async setCarPlate(orderNo, plate, staffId) {
+    const { rows } = await pool.query(SQL.setOrderCarPlate, [orderNo, plate, staffId]);
+    return rows[0] ?? null;
+  },
+
+  async setBoatPlate(orderNo, plate, staffId) {
+    const { rows } = await pool.query(SQL.setOrderBoatPlate, [orderNo, plate, staffId]);
+    return rows[0] ?? null;
+  },
 
   async setPlate(orderNo, plate, staffId) {
     const { rows } = await pool.query(SQL.setOrderPlate, [orderNo, plate, staffId]);
