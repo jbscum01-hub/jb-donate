@@ -4,21 +4,19 @@ import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VehiclesRepo } from "../../db/repo/vehicles.repo.js";
 import { InsuranceRepo } from "../../db/repo/insurance.repo.js";
 import { AuditRepo } from "../../db/repo/audit.repo.js";
-import { DONATE_PACKS } from "../../domain/catalog.js";
+import { VipRepo } from "../../db/repo/vip.repo.js";
+import { DONATE_PACKS, VIP_PACKS } from "../../domain/catalog.js";
 import { IDS } from "../../config/constants.js";
+import { ENV } from "../../config/env.js";
 import { collectAllAttachments } from "../utils/attachments.js";
 import { safeReply } from "../utils/messages.js";
 import { buildVehicleCard } from "../panels/vehicleCard.js";
-import { VIP_PACKS } from "../../domain/catalog.js";
-
 
 function requiredPlatesForDonate(order) {
   const p = DONATE_PACKS[order.pack_code];
 
-  const requireCar =
-    Boolean(order.selected_vehicle) || Boolean(p?.carInsurance);
-  const requireBoat =
-    Boolean(order.selected_boat) || Boolean(p?.boatInsurance);
+  const requireCar = Boolean(order.selected_vehicle) || Boolean(p?.carInsurance);
+  const requireBoat = Boolean(order.selected_boat) || Boolean(p?.boatInsurance);
 
   return { requireCar, requireBoat, pack: p };
 }
@@ -42,6 +40,45 @@ async function refreshVehicleCard(client, plate, kind) {
     ownerTag: v.owner_tag,
     insurance: ins,
   }));
+}
+
+async function logVip(client, text) {
+  try {
+    const ch = await client.channels.fetch(IDS.VIP_LOG_CHANNEL_ID);
+    await ch.send(text);
+  } catch {}
+}
+
+async function ensureVipActivated(interaction, order) {
+  const vip = VIP_PACKS[order.pack_code];
+  if (!vip) throw new Error(`Unknown VIP pack_code: ${order.pack_code}`);
+
+  const roleId = ENV[vip.roleKey];
+  if (!roleId) throw new Error(`Missing env role for VIP: ${vip.roleKey}`);
+
+  const days = Number(vip.days ?? 30);
+
+  const sub = await VipRepo.activateOrExtend({
+    guildId: order.guild_id,
+    userId: order.user_id,
+    vipCode: order.pack_code,
+    roleId,
+    daysToAdd: days,
+  });
+
+  // give role (best effort)
+  try {
+    const guild = await interaction.client.guilds.fetch(order.guild_id);
+    const member = await guild.members.fetch(order.user_id);
+    await member.roles.add(roleId);
+  } catch {}
+
+  await logVip(
+    interaction.client,
+    `✅ VIP ENSURE ACTIVE (CLOSE) | ${order.pack_code} | <@${order.user_id}> | expire: ${sub?.expire_at ?? "-"}`
+  );
+
+  return sub;
 }
 
 export async function closeOrder(interaction) {
@@ -146,22 +183,24 @@ export async function closeOrder(interaction) {
     }
   }
 
-    // ===== Grant insurance at CLOSE (VIP) =====
+  // ===== VIP: ensure subscription exists + (optional) VIP insurance at CLOSE =====
   if (order.type === "VIP") {
-    // ต้องมีทะเบียนรถเพื่อผูกประกัน
+    // Ensure VIP row exists (so tick works)
+    try {
+      await ensureVipActivated(interaction, order);
+    } catch (e) {
+      return safeReply(interaction, {
+        content: `❌ เปิดใช้งาน VIP ไม่สำเร็จ: ${e?.message ?? String(e)}`,
+        ephemeral: true,
+      });
+    }
+
+    // OPTIONAL: VIP insurance (CAR) - keep your original rule (requires car_plate)
     if (!order.car_plate) {
       return safeReply(interaction, {
         content: "❌ VIP ต้อง SET CAR PLATE (ทะเบียนรถ 6 หลัก) ก่อนปิดงาน",
         ephemeral: true
       });
-    }
-
-    // ตั้งค่าประกัน VIP (ปรับเลข days ได้ตามต้องการ)
-    // - BASIC/PRO: เพิ่มตามแพ็ก
-    // - ELITE: unlimited -> +9999
-    const vip = VIP_PACKS[order.pack_code];
-    if (!vip) {
-      return safeReply(interaction, { content: "❌ ไม่พบ VIP PACK", ephemeral: true });
     }
 
     const VIP_INS = {
@@ -178,8 +217,8 @@ export async function closeOrder(interaction) {
     await InsuranceRepo.upsertInsurance({
       plate: order.car_plate,
       kind: "CAR",
-      add_total: cfg.add_total,  // ✅ สะสมเพิ่ม
-      days: cfg.days,            // ✅ มี expire_at ทุกแพ็ก
+      add_total: cfg.add_total,
+      days: cfg.days,
       order_no: orderNo,
       source: "VIP_PACK",
     });
@@ -206,7 +245,7 @@ export async function closeOrder(interaction) {
   const archiveCh = await interaction.client.channels.fetch(IDS.SLIP_ARCHIVE_CHANNEL_ID);
 
   const summary = [
-    "🧾 **TICKET SUMMARY (SUCCESS)**",
+    "🧾 **TICKET SUMMARY (CLOSED)**",
     `Order: **${order.order_no}**`,
     `Buyer: <@${order.user_id}> (${order.user_tag})`,
     `IGN: ${order.ign}`,
@@ -224,14 +263,14 @@ export async function closeOrder(interaction) {
 
   await archiveCh.send(summary + "\n\n**Attachments:**\n" + attachList);
 
-  // ===== Update order status =====
-  await OrdersRepo.setStatus(orderNo, "SUCCESS", interaction.user.id);
+  // ===== Update order status (use dashboard-compatible status) =====
+  await OrdersRepo.setStatus(orderNo, "CLOSED", interaction.user.id);
 
   await AuditRepo.add({
     guild_id: interaction.guildId,
     actor_id: interaction.user.id,
     actor_tag: interaction.user.tag,
-    action: "ORDER_CLOSE_SUCCESS",
+    action: "ORDER_CLOSE",
     target: orderNo,
     meta: {
       car_plate: order.car_plate ?? null,
@@ -243,10 +282,10 @@ export async function closeOrder(interaction) {
   // ===== DM user (best effort) =====
   try {
     const u = await interaction.client.users.fetch(order.user_id);
-    await u.send(`✅ ออเดอร์ ${orderNo} สำเร็จแล้ว ขอบคุณสำหรับการสนับสนุน ❤️`);
+    await u.send(`✅ ออเดอร์ ${orderNo} ปิดงานแล้ว ขอบคุณสำหรับการสนับสนุน ❤️`);
   } catch {}
 
   await safeReply(interaction, { content: "✅ ปิดงานสำเร็จ กำลังลบห้อง…", ephemeral: true });
 
-  await ticketCh.delete("Ticket closed SUCCESS").catch(() => {});
+  await ticketCh.delete("Ticket closed").catch(() => {});
 }

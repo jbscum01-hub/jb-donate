@@ -109,16 +109,19 @@ export const VEHICLE_COMMANDS = {
 export const VIP_PACKS = {
   BASIC: {
     price: 199,
+    days: 30,
     weeklyItems: ["SCUM$ 20,000", "Bunker Key Card x2", "Phoenix Tears x3", "Screwdriver x5"],
     roleKey: "VIP_BASIC_ROLE_ID",
   },
   PRO: {
     price: 300,
+    days: 30,
     weeklyItems: ["SCUM$ 30,000", "Bunker Key Card x5", "Phoenix Tears x10", "Screwdriver x20"],
     roleKey: "VIP_PRO_ROLE_ID",
   },
   ELITE: {
     price: 500,
+    days: 30,
     weeklyItems: ["SCUM$ 50,000", "Bunker Key Card x10", "Phoenix Tears x25", "Screwdriver x40"],
     roleKey: "VIP_ELITE_ROLE_ID",
   },
