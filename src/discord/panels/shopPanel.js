@@ -53,11 +53,11 @@ export function buildShopPanel() {
         description: "Donate Package • 500",
         value: "DONATE:DIAMOND",
       },
-      {
-        label: "⭐ Elite Operator",
-        description: "Boost Package • 399",
-        value: "BOOST:ELITE_OPERATOR",
-      },
+      //{
+      //  label: "⭐ Elite Operator",
+      //  description: "Boost Package • 399",
+      //  value: "BOOST:ELITE_OPERATOR",
+      //},
       {
         label: "🟢 VIP BASIC",
         description: "VIP Package • 199",
