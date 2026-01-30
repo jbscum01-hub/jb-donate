@@ -45,4 +45,20 @@ export const OrdersRepo = {
   async setQueueMessageId(orderNo, messageId) {
     await pool.query(SQL.setOrderQueueMsg, [orderNo, messageId]);
   },
+
+  async getDashboardStats(guildId) {
+  const { rows } = await pool.query(SQL.getOrdersDashboardStats, [guildId]);
+  return rows[0] ?? {
+    total_amount: 0,
+    total_orders: 0,
+    today_amount: 0,
+    today_orders: 0,
+    pending_orders: 0,
+    approved_orders: 0,
+    delivered_orders: 0,
+    closed_orders: 0,
+    canceled_orders: 0,
+    };
+  },
+
 };
