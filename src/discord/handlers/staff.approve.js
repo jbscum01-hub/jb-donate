@@ -1,4 +1,5 @@
 // src/discord/handlers/staff.approve.js
+import { EmbedBuilder } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VipRepo } from "../../db/repo/vip.repo.js";
@@ -76,7 +77,24 @@ export async function approveOrder(interaction) {
       // log
       const ch = await interaction.client.channels.fetch(IDS.VIP_LOG_CHANNEL_ID).catch(() => null);
       if (ch) {
-        await ch.send(`👑 VIP ACTIVATED | ${order.pack_code} | <@${order.user_id}> | +${daysToAdd} days | expire: ${sub?.expire_at ?? "?"}`);
+const pack = VIP_PACKS[order.pack_code];
+const items = (pack?.displayItems ?? []).map(x => `• ${x}`).join("\n") || "-";
+const cmds = (pack?.spawnItems ?? []).join("\n") || "-";
+
+const embed = new EmbedBuilder()
+  .setTitle("👑 VIP Log")
+  .setDescription("บันทึกการเปิดใช้งาน/ต่ออายุ VIP")
+  .addFields(
+    { name: "👤 ผู้เล่น", value: `<@${order.user_id}>`, inline: true },
+    { name: "🎟️ แพ็ก", value: `${order.pack_code} (${order.amount}฿)`, inline: true },
+    { name: "⏱️ ต่ออายุ", value: `+${daysToAdd} วัน`, inline: true },
+    { name: "📅 หมดอายุ", value: String(sub?.expire_at ?? "?"), inline: false },
+    { name: "📦 รายการ (อ่านง่าย)", value: items, inline: false },
+    { name: "🧾 คำสั่งเสก", value: `\`\`\`\n${cmds}\n\`\`\``, inline: false },
+  )
+  .setFooter({ text: `Order: ${order.order_no} | Approved by ${interaction.user.tag}` });
+
+await ch.send({ embeds: [embed] });
       }
     } catch (e) {
       console.error("VIP activate error:", e);

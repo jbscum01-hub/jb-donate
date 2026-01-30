@@ -26,7 +26,10 @@ export async function runVipTick(client) {
   const due = await VipRepo.dueGrants();
   for (const v of due) {
     const pack = VIP_PACKS[v.vip_code];
-    const items = (pack?.weeklyItems ?? []).map(x => `- ${x}`).join("\n");
+    const items = (pack?.displayItems ?? []).map(x => `- ${x}`).join("
+");
+    const cmds = (pack?.spawnItems ?? []).join("
+");
     await logVip(
       client,
       `🎁 VIP DUE | ${v.vip_code} | <@${v.user_id}>\nสรุปรายการแจก (ทีมงานแจกเอง):\n${items}`

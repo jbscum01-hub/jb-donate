@@ -20,7 +20,11 @@ function buildTemplate(order) {
   if (order.type === "DONATE") {
     const p = DONATE_PACKS[order.pack_code];
     lines.push("ITEMS:");
-    for (const it of p.items) lines.push(`- ${it}`);
+    for (const it of (p.displayItems ?? [])) lines.push(`- ${it}`);
+    lines.push("");
+
+    lines.push("SPAWN COMMANDS:");
+    for (const cmd of (p.spawnItems ?? [])) lines.push(cmd);
     lines.push("");
 
     if (order.selected_vehicle) {
@@ -48,8 +52,11 @@ function buildTemplate(order) {
 
   if (order.type === "VIP") {
     const v = VIP_PACKS[order.pack_code];
-    lines.push("VIP WEEKLY ITEMS (summary):");
-    for (const it of v.weeklyItems) lines.push(`- ${it}`);
+    lines.push("VIP WEEKLY ITEMS:");
+    for (const it of (v.displayItems ?? [])) lines.push(`- ${it}`);
+    lines.push("");
+    lines.push("VIP WEEKLY SPAWN COMMANDS:");
+    for (const cmd of (v.spawnItems ?? [])) lines.push(cmd);
   }
 
   lines.push("===============================");

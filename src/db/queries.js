@@ -95,6 +95,8 @@ export const SQL = {
     where o.guild_id = $1;
   `,
 
+  
+  ,
   // =========================
   // VIP Subscriptions
   // - create/extend VIP and set next_grant_at
@@ -130,8 +132,7 @@ export const SQL = {
       next_grant_at = coalesce(vip_subscriptions.next_grant_at, now())
     returning *;
   `,
-
-  // =========================
+// =========================
   // Vehicles
   // =========================
   upsertVehicle: `
@@ -159,6 +160,19 @@ export const SQL = {
 
   // =========================
   // Insurance
+  // RULE: insurance must always have expire_at (no NULL expire_at)
+  // - accumulate: total += add_total
+  // - keep used (do NOT reset used)
+  // - extend expiry from max(expire_at, now()) by days_to_add
+  //
+  // params:
+  // $1 plate
+  // $2 kind
+  // $3 add_total
+  // $4 used_initial (0)
+  // $5 days_to_add (must be > 0 for insurance packs)
+  // $6 order_no
+  // $7 source
   // =========================
   upsertVehicleInsurance: `
     insert into vehicle_insurance (plate,kind,total,used,expire_at,order_no,source)
