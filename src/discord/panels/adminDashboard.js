@@ -1,53 +1,77 @@
 // src/discord/panels/adminDashboard.js
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
-import { ENV } from "../../config/env.js";
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from "discord.js";
 
-// TODO: ถ้าคุณมี repo/db อยู่แล้ว ให้ import มาแทนด้านล่าง
-// import { OrdersRepo } from "../../db/repo/orders.repo.js";
-// import { VipRepo } from "../../db/repo/vip.repo.js";
+import { ENV } from "../../config/env.js";
+import { OrdersRepo } from "../../db/repo/orders.repo.js";
 
 function nowTH() {
   return new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
 }
 
+function n(v) {
+  const x = Number(v || 0);
+  return Number.isFinite(x) ? x : 0;
+}
+
+function fmtMoney(v) {
+  return n(v).toLocaleString("en-US");
+}
+
 export async function buildAdminDashboardSnapshot(client) {
-  // ✅ ค่าเริ่มต้นแบบ “ไม่พึ่ง DB” ก่อน (กันพัง)
-  // ต่อไปค่อยเสียบ DB จริง
   const data = {
     totalAmount: 0,
     totalOrders: 0,
     todayAmount: 0,
     todayOrders: 0,
-    vipDueSoon: 0,
-    vipExpired: 0,
-    vipWarn: 0,
+
+    pendingOrders: 0,
+    approvedOrders: 0,
+    deliveredOrders: 0,
+    closedOrders: 0,
+    canceledOrders: 0,
+
     queueCount: 0,
+    notes: [],
   };
 
-  // --- ตัวอย่าง “เสียบ DB” (คุณค่อยปรับให้ตรงตารางจริง)
-  // try {
-  //   const s = await OrdersRepo.getDashboardStats();
-  //   Object.assign(data, s);
-  // } catch (e) {
-  //   console.warn("Dashboard OrdersRepo not ready:", e?.message || e);
-  // }
-  //
-  // try {
-  //   const v = await VipRepo.getVipStats();
-  //   data.vipDueSoon = v.dueSoon;
-  //   data.vipExpired = v.expired;
-  //   data.vipWarn = v.warn;
-  // } catch (e) {
-  //   console.warn("Dashboard VipRepo not ready:", e?.message || e);
-  // }
+  // 1) Orders stats from DB
+  try {
+    if (!ENV.GUILD_ID) {
+      data.notes.push("⚠️ Missing ENV.GUILD_ID (Dashboard stats may be 0)");
+    } else {
+      const s = await OrdersRepo.getDashboardStats(ENV.GUILD_ID);
 
-  // ✅ ดึงสถานะห้อง queue แบบเบา ๆ (ถ้าห้องมี thread/ticket เยอะค่อยปรับ)
+      data.totalAmount = n(s.total_amount);
+      data.totalOrders = n(s.total_orders);
+      data.todayAmount = n(s.today_amount);
+      data.todayOrders = n(s.today_orders);
+
+      data.pendingOrders = n(s.pending_orders);
+      data.approvedOrders = n(s.approved_orders);
+      data.deliveredOrders = n(s.delivered_orders);
+      data.closedOrders = n(s.closed_orders);
+      data.canceledOrders = n(s.canceled_orders);
+    }
+  } catch (e) {
+    data.notes.push(`⚠️ OrdersRepo stats error: ${e?.message || String(e)}`);
+  }
+
+  // 2) Queue / ticket rough count (best-effort)
   try {
     if (ENV.QUEUE_CHANNEL_ID) {
       const qch = await client.channels.fetch(ENV.QUEUE_CHANNEL_ID).catch(() => null);
-      if (qch) data.queueCount = (qch.threads?.cache?.size || 0);
+      if (qch?.threads?.cache) {
+        data.queueCount = qch.threads.cache.size;
+      }
     }
-  } catch {}
+  } catch (e) {
+    // ไม่ critical
+  }
 
   return data;
 }
@@ -59,22 +83,75 @@ export async function buildAdminDashboardMessage(client) {
     .setTitle("🛠️ Admin Dashboard")
     .setDescription("แผงควบคุมระบบ Donate / Ticket / VIP")
     .addFields(
-      { name: "📊 Donate (รวม)", value: `ยอดรวม: **${s.totalAmount.toLocaleString()}**\nออเดอร์: **${s.totalOrders.toLocaleString()}**`, inline: true },
-      { name: "📅 วันนี้", value: `ยอดวันนี้: **${s.todayAmount.toLocaleString()}**\nออเดอร์วันนี้: **${s.todayOrders.toLocaleString()}**`, inline: true },
-      { name: "👑 VIP", value: `ใกล้หมด: **${s.vipDueSoon}**\nเตือน: **${s.vipWarn}**\nหมดอายุ: **${s.vipExpired}**`, inline: true },
-      { name: "🎟️ Queue / Ticket", value: `คิว/เธรดในห้อง: **${s.queueCount}**`, inline: true },
-      { name: "🧩 System", value: `ENV: **${process.env.RAILWAY_ENVIRONMENT_NAME || "local"}**\nอัปเดตล่าสุด: **${nowTH()}**`, inline: true },
+      {
+        name: "📊 Donate (รวม)",
+        value: `ยอดรวม: **${fmtMoney(s.totalAmount)}**\nออเดอร์: **${fmtMoney(s.totalOrders)}**`,
+        inline: true,
+      },
+      {
+        name: "📅 วันนี้ (TH)",
+        value: `ยอดวันนี้: **${fmtMoney(s.todayAmount)}**\nออเดอร์วันนี้: **${fmtMoney(s.todayOrders)}**`,
+        inline: true,
+      },
+      {
+        name: "📦 Orders Status",
+        value:
+          `PENDING: **${fmtMoney(s.pendingOrders)}**\n` +
+          `APPROVED: **${fmtMoney(s.approvedOrders)}**\n` +
+          `DELIVERED: **${fmtMoney(s.deliveredOrders)}**\n` +
+          `CLOSED: **${fmtMoney(s.closedOrders)}**\n` +
+          `CANCELED: **${fmtMoney(s.canceledOrders)}**`,
+        inline: true,
+      },
+      {
+        name: "🎟️ Queue / Ticket",
+        value: `เธรดในห้องคิว: **${fmtMoney(s.queueCount)}**`,
+        inline: true,
+      },
+      {
+        name: "🧩 System",
+        value:
+          `ENV: **${process.env.RAILWAY_ENVIRONMENT_NAME || "local"}**\n` +
+          `Updated: **${nowTH()}**`,
+        inline: true,
+      }
     );
 
+  if (s.notes?.length) {
+    embed.addFields({
+      name: "⚠️ Notes",
+      value: s.notes.slice(0, 5).join("\n"),
+      inline: false,
+    });
+  }
+
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("admin:refresh").setLabel("🔄 Refresh").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("admin:vip_tick").setLabel("🟣 Run VIP Tick").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("admin:health").setLabel("🟢 Health Check").setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId("admin:refresh")
+      .setLabel("🔄 Refresh")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("admin:vip_tick")
+      .setLabel("🟣 Run VIP Tick")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("admin:health")
+      .setLabel("🟢 Health Check")
+      .setStyle(ButtonStyle.Success)
   );
 
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("admin:rebuild_panels").setLabel("🧱 Rebuild Panels").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("admin:show_env").setLabel("🔐 Show Config").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("admin:rebuild_panels")
+      .setLabel("🧱 Rebuild Panels")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("admin:show_env")
+      .setLabel("🔐 Show Config")
+      .setStyle(ButtonStyle.Danger)
   );
 
   return { content: "", embeds: [embed], components: [row1, row2] };
