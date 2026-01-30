@@ -56,6 +56,42 @@ export const SQL = {
     update orders set queue_message_id=$2 where order_no=$1
   `,
 
+  getOrdersDashboardStats: `
+    with tz as (
+      select
+        (date_trunc('day', now() at time zone 'Asia/Bangkok')) as day_start_th,
+        (date_trunc('day', (now() at time zone 'Asia/Bangkok') + interval '1 day')) as day_end_th
+    )
+    select
+      coalesce(sum(o.amount), 0)::bigint as total_amount,
+      count(*)::bigint as total_orders,
+
+      coalesce(sum(
+        case
+          when (o.created_at at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
+           and (o.created_at at time zone 'Asia/Bangkok') <  (select day_end_th from tz)
+          then o.amount else 0
+        end
+      ), 0)::bigint as today_amount,
+
+      count(
+        case
+          when (o.created_at at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
+           and (o.created_at at time zone 'Asia/Bangkok') <  (select day_end_th from tz)
+          then 1 else null
+        end
+      )::bigint as today_orders,
+
+      count(case when o.status = 'PENDING'   then 1 end)::bigint as pending_orders,
+      count(case when o.status = 'APPROVED'  then 1 end)::bigint as approved_orders,
+      count(case when o.status = 'DELIVERED' then 1 end)::bigint as delivered_orders,
+      count(case when o.status = 'CLOSED'    then 1 end)::bigint as closed_orders,
+      count(case when o.status = 'CANCELED'  then 1 end)::bigint as canceled_orders
+
+    from orders o
+    where o.guild_id = $1;
+  `,  
+
   // =========================
   // Vehicles
   // =========================
