@@ -43,11 +43,54 @@ async function vipTickSafe() {
     vipRunning = false;
   }
 }
+async function ensureAdminDashboardMessage(client) {
+  const channelId = process.env.ADMIN_DASHBOARD_CHANNEL_ID;
+  if (!channelId) {
+    console.warn("⚠️ ADMIN_DASHBOARD_CHANNEL_ID is not set");
+    return null;
+  }
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel) {
+    console.error("❌ Cannot fetch admin dashboard channel:", channelId);
+    return null;
+  }
+
+  // ข้อความเริ่มต้น (เอาไว้สร้าง Message ID ก่อน)
+  const payload = {
+    content: "🛠️ **Admin Dashboard**\n(ข้อความนี้สร้างอัตโนมัติเพื่อใช้เป็น Dashboard หลัก)",
+  };
+
+  const existingId = process.env.ADMIN_DASHBOARD_MESSAGE_ID;
+
+  // ถ้ามี id อยู่แล้ว ลอง fetch ดูว่า message ยังอยู่ไหม
+  if (existingId) {
+    const msg = await channel.messages.fetch(existingId).catch(() => null);
+    if (msg) {
+      // จะ edit หรือไม่ edit ก็ได้ — ที่นี่ขอ update content ให้รู้ว่าใช้งานอยู่
+      await msg.edit(payload).catch(() => {});
+      console.log("✅ Admin dashboard message exists:", msg.id);
+      return msg.id;
+    }
+    console.warn("⚠️ ADMIN_DASHBOARD_MESSAGE_ID not found, will create a new one:", existingId);
+  }
+
+  // ยังไม่มี id หรือหาไม่เจอ → สร้างใหม่
+  const created = await channel.send(payload);
+  console.log("✅ Admin dashboard message created:", created.id);
+  console.log("➡️ Copy this value to Railway ENV: ADMIN_DASHBOARD_MESSAGE_ID =", created.id);
+  return created.id;
+}
 
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log(`Shop Channel: ${IDS.SHOP_CHANNEL_ID}`);
 
+    // ✅ สร้าง/ตรวจ Admin Dashboard message (เพื่อให้ได้ Message ID)
+  if (process.env.SEND_ADMIN_DASHBOARD_ON_START === "true") {
+    await ensureAdminDashboardMessage(client);
+  }
+  
   await vipTickSafe();
   setInterval(vipTickSafe, SIX_HOURS);
 });
