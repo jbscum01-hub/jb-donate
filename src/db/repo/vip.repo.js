@@ -15,6 +15,35 @@ import { SQL } from "../queries.js";
  * - created_at timestamp default now()
  */
 export const VipRepo = {
+  async getDashboardStats(guildId) {
+    const { rows } = await pool.query(
+      `select
+         count(*) filter (where active=true)                         ::bigint as active,
+         count(*) filter (where active=true and expire_at <= now())  ::bigint as expired,
+         count(*) filter (where active=true and expire_at <= now() + interval '24 hours')::bigint as expiring_24h,
+         count(*) filter (where active=true and expire_at <= now() + interval '3 days')  ::bigint as expiring_3d,
+         count(*) filter (where active=true and next_grant_at <= now())::bigint as due_grants
+       from vip_subscriptions
+       where guild_id=$1`,
+      [guildId]
+    );
+    return rows[0] ?? { active: 0, expired: 0, expiring_24h: 0, expiring_3d: 0, due_grants: 0 };
+  },
+
+  async listExpiringSoon(guildId, hours = 24, limit = 5) {
+    const { rows } = await pool.query(
+      `select user_id, vip_code, expire_at
+       from vip_subscriptions
+       where guild_id=$1
+         and active=true
+         and expire_at is not null
+         and expire_at <= now() + ($2 || ' hours')::interval
+       order by expire_at asc
+       limit $3`,
+      [guildId, Number(hours) || 24, Number(limit) || 5]
+    );
+    return rows;
+  },
   async dueGrants() {
     const { rows } = await pool.query(
       `select * from vip_subscriptions

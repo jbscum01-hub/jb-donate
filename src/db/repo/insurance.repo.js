@@ -3,6 +3,29 @@ import { pool } from "../pool.js";
 import { SQL } from "../queries.js";
 
 export const InsuranceRepo = {
+  async getDashboardStats(limit = 5) {
+    const { rows: r1 } = await pool.query(
+      `select
+         count(*) filter (where expire_at > now())::bigint as active,
+         count(*) filter (where expire_at <= now())::bigint as expired,
+         count(*) filter (where expire_at <= now() + interval '24 hours')::bigint as expiring_24h,
+         count(*) filter (where expire_at <= now() + interval '3 days')::bigint as expiring_3d,
+         count(*) filter (where expire_at > now() and used >= total)::bigint as exhausted
+       from vehicle_insurance`
+    );
+
+    const { rows: soon } = await pool.query(
+      `select plate, kind, used, total, expire_at
+       from vehicle_insurance
+       where expire_at is not null
+         and expire_at > now()
+       order by expire_at asc
+       limit $1`,
+      [Number(limit) || 5]
+    );
+
+    return { ...(r1[0] ?? { active: 0, expired: 0, expiring_24h: 0, expiring_3d: 0, exhausted: 0 }), soon };
+  },
   /**
    * Upsert insurance by ACCUMULATING totals and EXTENDING expiry.
    * Required fields:

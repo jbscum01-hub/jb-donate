@@ -95,6 +95,87 @@ export const SQL = {
     where o.guild_id = $1;
   `,
 
+  // ✅ Dashboard extra stats (breakdowns + aging)
+  getOrdersDashboardExtra: `
+    with tz as (
+      select
+        (date_trunc('day', now() at time zone 'Asia/Bangkok')) as day_start_th,
+        (date_trunc('day', (now() at time zone 'Asia/Bangkok') + interval '1 day')) as day_end_th
+    ),
+    base as (
+      select
+        o.*,
+        (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') as created_th
+      from orders o
+      where o.guild_id = $1
+    )
+    select
+      -- today status counts
+      count(case when b.created_th >= (select day_start_th from tz)
+                 and b.created_th <  (select day_end_th from tz)
+                 and b.status='PENDING' then 1 end)::bigint   as today_pending,
+      count(case when b.created_th >= (select day_start_th from tz)
+                 and b.created_th <  (select day_end_th from tz)
+                 and b.status='APPROVED' then 1 end)::bigint  as today_approved,
+      count(case when b.created_th >= (select day_start_th from tz)
+                 and b.created_th <  (select day_end_th from tz)
+                 and b.status='DELIVERED' then 1 end)::bigint as today_delivered,
+      count(case when b.created_th >= (select day_start_th from tz)
+                 and b.created_th <  (select day_end_th from tz)
+                 and b.status='CLOSED' then 1 end)::bigint    as today_closed,
+      count(case when b.created_th >= (select day_start_th from tz)
+                 and b.created_th <  (select day_end_th from tz)
+                 and b.status='CANCELED' then 1 end)::bigint  as today_canceled,
+
+      -- today breakdown by type
+      coalesce(sum(case when b.created_th >= (select day_start_th from tz)
+                         and b.created_th <  (select day_end_th from tz)
+                         and b.type='DONATE' then b.amount else 0 end),0)::bigint as today_donate_amount,
+      count(case when b.created_th >= (select day_start_th from tz)
+                 and b.created_th <  (select day_end_th from tz)
+                 and b.type='DONATE' then 1 end)::bigint as today_donate_orders,
+
+      coalesce(sum(case when b.created_th >= (select day_start_th from tz)
+                         and b.created_th <  (select day_end_th from tz)
+                         and b.type='VIP' then b.amount else 0 end),0)::bigint as today_vip_amount,
+      count(case when b.created_th >= (select day_start_th from tz)
+                 and b.created_th <  (select day_end_th from tz)
+                 and b.type='VIP' then 1 end)::bigint as today_vip_orders,
+
+      coalesce(sum(case when b.created_th >= (select day_start_th from tz)
+                         and b.created_th <  (select day_end_th from tz)
+                         and b.type='BOOST' then b.amount else 0 end),0)::bigint as today_boost_amount,
+      count(case when b.created_th >= (select day_start_th from tz)
+                 and b.created_th <  (select day_end_th from tz)
+                 and b.type='BOOST' then 1 end)::bigint as today_boost_orders,
+
+      -- pending aging
+      count(case when b.status='PENDING' and b.created_at <= now() - interval '24 hours' then 1 end)::bigint as pending_over_24h,
+      min(case when b.status='PENDING' then b.created_th end) as oldest_pending_th
+    from base b;
+  `,
+
+  getOrdersRecent: `
+    select order_no, type, pack_code, amount, status, user_tag,
+           (created_at at time zone 'UTC' at time zone 'Asia/Bangkok') as created_th
+    from orders
+    where guild_id=$1
+    order by created_at desc
+    limit $2;
+  `,
+
+  getOrdersTopPacks7d: `
+    select pack_code,
+           count(*)::bigint as orders,
+           coalesce(sum(amount),0)::bigint as amount
+    from orders
+    where guild_id=$1
+      and created_at >= (now() - interval '7 days')
+    group by pack_code
+    order by amount desc, orders desc
+    limit $2;
+  `,
+
   // =========================
   // VIP Subscriptions
   // - create/extend VIP and set next_grant_at

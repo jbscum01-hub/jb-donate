@@ -61,4 +61,33 @@ export const OrdersRepo = {
     };
   },
 
+  async getDashboardExtra(guildId) {
+    const { rows } = await pool.query(SQL.getOrdersDashboardExtra, [guildId]);
+    return rows[0] ?? {
+      today_pending: 0,
+      today_approved: 0,
+      today_delivered: 0,
+      today_closed: 0,
+      today_canceled: 0,
+      today_donate_amount: 0,
+      today_donate_orders: 0,
+      today_vip_amount: 0,
+      today_vip_orders: 0,
+      today_boost_amount: 0,
+      today_boost_orders: 0,
+      pending_over_24h: 0,
+      oldest_pending_th: null,
+    };
+  },
+
+  async getRecent(guildId, limit = 5) {
+    const { rows } = await pool.query(SQL.getOrdersRecent, [guildId, Number(limit) || 5]);
+    return rows;
+  },
+
+  async getTopPacks7d(guildId, limit = 5) {
+    const { rows } = await pool.query(SQL.getOrdersTopPacks7d, [guildId, Number(limit) || 5]);
+    return rows;
+  },
+
 };
