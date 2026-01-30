@@ -1,40 +1,76 @@
-process.on("unhandledRejection", (err) => console.error("UNHANDLED REJECTION:", err));
-process.on("uncaughtException", (err) => console.error("UNCAUGHT EXCEPTION:", err));
-
-
+import "dotenv/config";
+import dns from "dns";
 import http from "http";
+import { fetch } from "undici";
+
 import { createClient } from "./discord/client.js";
 import { routeInteraction } from "./discord/router.js";
 import { ENV } from "./config/env.js";
 import { IDS } from "./config/constants.js";
 import { runVipTick } from "./jobs/vipRunner.js";
 
+/* ===============================
+   FIX DNS (Render / IPv6 issue)
+================================ */
+dns.setDefaultResultOrder("ipv4first");
+
+/* ===============================
+   GLOBAL ERROR HANDLERS
+================================ */
+process.on("unhandledRejection", (err) =>
+  console.error("UNHANDLED REJECTION:", err)
+);
+process.on("uncaughtException", (err) =>
+  console.error("UNCAUGHT EXCEPTION:", err)
+);
+
+/* ===============================
+   DISCORD CLIENT
+================================ */
 const client = createClient();
 
-// Extra logs to diagnose "Interaction failed" / missing READY logs on Render
 client.on("warn", (m) => console.warn("[discord.warn]", m));
 client.on("error", (e) => console.error("[discord.error]", e));
 client.on("shardError", (e) => console.error("[discord.shardError]", e));
-client.on("shardDisconnect", (event, id) => {
-  console.warn("[discord.shardDisconnect]", { id, code: event?.code, reason: event?.reason });
-});
-client.on("shardReconnecting", (id) => console.warn("[discord.shardReconnecting]", { id }));
-client.on("shardResume", (id) => console.log("[discord.shardResume]", { id }));
 
-// ===== Render Keep Alive HTTP Server =====
+/* ===============================
+   RENDER KEEP-ALIVE HTTP
+================================ */
 const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ ok: true }));
-  }
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end("Discord bot is running\n");
-}).listen(PORT, () => {
-  console.log(`🌐 HTTP server running on port ${PORT}`);
-});
+http
+  .createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ ok: true }));
+    }
+    res.writeHead(200);
+    res.end("Discord bot is running\n");
+  })
+  .listen(PORT, () => {
+    console.log(`🌐 HTTP server running on port ${PORT}`);
+  });
 
-// ===== VIP Tick Scheduler (no cron needed) =====
+/* ===============================
+   STEP 2: PING DISCORD GATEWAY
+================================ */
+async function pingDiscordGateway() {
+  console.log("🌍 Checking Discord gateway connectivity...");
+  try {
+    const res = await fetch("https://discord.com/api/v10/gateway", {
+      method: "GET",
+      headers: { "User-Agent": "jb-donate-bot/1.0" },
+    });
+    console.log("🌍 Discord gateway status:", res.status);
+  } catch (err) {
+    console.error("🌍 Discord gateway ping FAILED:", err);
+  }
+}
+
+await pingDiscordGateway();
+
+/* ===============================
+   VIP TICK
+================================ */
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 let vipRunning = false;
 
@@ -43,7 +79,7 @@ async function vipTickSafe() {
   vipRunning = true;
   try {
     const r = await runVipTick(client);
-    console.log(`🟣 VIP tick done:`, r);
+    console.log("🟣 VIP tick done:", r);
   } catch (e) {
     console.error("VIP tick error:", e);
   } finally {
@@ -51,14 +87,14 @@ async function vipTickSafe() {
   }
 }
 
+/* ===============================
+   DISCORD READY
+================================ */
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log(`Shop Channel: ${IDS.SHOP_CHANNEL_ID}`);
+  console.log(`📦 Shop Channel: ${IDS.SHOP_CHANNEL_ID}`);
 
-  // run once on startup (optional but useful)
   await vipTickSafe();
-
-  // then every 6 hours
   setInterval(vipTickSafe, SIX_HOURS);
 });
 
@@ -66,16 +102,17 @@ client.on("interactionCreate", async (interaction) => {
   await routeInteraction(interaction);
 });
 
-// Login with explicit error handling (Render logs will show if token/connection fails)
+/* ===============================
+   LOGIN + DEADLINE GUARD
+================================ */
 console.log("🔐 Attempting Discord login...");
 
-// If Discord never becomes READY (e.g., outbound network to Discord is blocked),
-// Render will still mark the service as "live" because HTTP is up. Force restart.
 const LOGIN_DEADLINE_MS = 60_000;
 const loginDeadline = setTimeout(() => {
   console.error(
-    `❌ Discord did not become READY within ${LOGIN_DEADLINE_MS / 1000}s. ` +
-      "Most common causes: invalid DISCORD_TOKEN, missing Gateway Intents, or Render network/DNS issues. Restarting..."
+    `❌ Discord did not become READY within ${
+      LOGIN_DEADLINE_MS / 1000
+    }s. Likely NETWORK / DNS issue. Restarting...`
   );
   process.exit(1);
 }, LOGIN_DEADLINE_MS);
@@ -84,6 +121,5 @@ client.once("ready", () => clearTimeout(loginDeadline));
 
 client.login(ENV.DISCORD_TOKEN).catch((e) => {
   console.error("❌ Discord login failed:", e);
-  // Exit so Render restarts the service instead of staying "live" without the bot.
   process.exit(1);
 });
