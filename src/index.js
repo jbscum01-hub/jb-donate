@@ -15,6 +15,11 @@ const client = createClient();
 client.on("warn", (m) => console.warn("[discord.warn]", m));
 client.on("error", (e) => console.error("[discord.error]", e));
 client.on("shardError", (e) => console.error("[discord.shardError]", e));
+client.on("shardDisconnect", (event, id) => {
+  console.warn("[discord.shardDisconnect]", { id, code: event?.code, reason: event?.reason });
+});
+client.on("shardReconnecting", (id) => console.warn("[discord.shardReconnecting]", { id }));
+client.on("shardResume", (id) => console.log("[discord.shardResume]", { id }));
 
 // ===== Render Keep Alive HTTP Server =====
 const PORT = process.env.PORT || 3000;
@@ -62,6 +67,21 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 // Login with explicit error handling (Render logs will show if token/connection fails)
+console.log("🔐 Attempting Discord login...");
+
+// If Discord never becomes READY (e.g., outbound network to Discord is blocked),
+// Render will still mark the service as "live" because HTTP is up. Force restart.
+const LOGIN_DEADLINE_MS = 60_000;
+const loginDeadline = setTimeout(() => {
+  console.error(
+    `❌ Discord did not become READY within ${LOGIN_DEADLINE_MS / 1000}s. ` +
+      "Most common causes: invalid DISCORD_TOKEN, missing Gateway Intents, or Render network/DNS issues. Restarting..."
+  );
+  process.exit(1);
+}, LOGIN_DEADLINE_MS);
+
+client.once("ready", () => clearTimeout(loginDeadline));
+
 client.login(ENV.DISCORD_TOKEN).catch((e) => {
   console.error("❌ Discord login failed:", e);
   // Exit so Render restarts the service instead of staying "live" without the bot.
