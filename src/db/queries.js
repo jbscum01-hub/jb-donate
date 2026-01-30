@@ -56,6 +56,9 @@ export const SQL = {
     update orders set queue_message_id=$2 where order_no=$1
   `,
 
+  // ✅ Dashboard stats (Today based on Asia/Bangkok)
+  // NOTE: created_at in your DB appears to be "timestamp without time zone" storing UTC values.
+  // So we interpret it as UTC first, then convert to Asia/Bangkok.
   getOrdersDashboardStats: `
     with tz as (
       select
@@ -68,16 +71,16 @@ export const SQL = {
 
       coalesce(sum(
         case
-          when (o.created_at at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
-           and (o.created_at at time zone 'Asia/Bangkok') <  (select day_end_th from tz)
+          when (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
+           and (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') <  (select day_end_th from tz)
           then o.amount else 0
         end
       ), 0)::bigint as today_amount,
 
       count(
         case
-          when (o.created_at at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
-           and (o.created_at at time zone 'Asia/Bangkok') <  (select day_end_th from tz)
+          when (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
+           and (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') <  (select day_end_th from tz)
           then 1 else null
         end
       )::bigint as today_orders,
@@ -90,7 +93,7 @@ export const SQL = {
 
     from orders o
     where o.guild_id = $1;
-  `,  
+  `,
 
   // =========================
   // Vehicles
