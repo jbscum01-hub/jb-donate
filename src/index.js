@@ -66,8 +66,6 @@ async function pingDiscordGateway() {
   }
 }
 
-await pingDiscordGateway();
-
 /* ===============================
    VIP TICK
 ================================ */
