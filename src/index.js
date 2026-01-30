@@ -11,6 +11,11 @@ import { runVipTick } from "./jobs/vipRunner.js";
 
 const client = createClient();
 
+// Extra logs to diagnose "Interaction failed" / missing READY logs on Render
+client.on("warn", (m) => console.warn("[discord.warn]", m));
+client.on("error", (e) => console.error("[discord.error]", e));
+client.on("shardError", (e) => console.error("[discord.shardError]", e));
+
 // ===== Render Keep Alive HTTP Server =====
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
@@ -56,4 +61,9 @@ client.on("interactionCreate", async (interaction) => {
   await routeInteraction(interaction);
 });
 
-client.login(ENV.DISCORD_TOKEN);
+// Login with explicit error handling (Render logs will show if token/connection fails)
+client.login(ENV.DISCORD_TOKEN).catch((e) => {
+  console.error("❌ Discord login failed:", e);
+  // Exit so Render restarts the service instead of staying "live" without the bot.
+  process.exit(1);
+});
