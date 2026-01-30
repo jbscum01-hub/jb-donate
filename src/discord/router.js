@@ -12,9 +12,25 @@ import { cancelOrder } from "./handlers/staff.cancel.js";
 import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
+import { buildShopPanel } from "./panels/shopPanel.js";
 import { isAdmin } from "../domain/permissions.js";
 import { ENV } from "../config/env.js";
 import { runVipTick } from "../jobs/vipRunner.js";
+
+
+async function rebuildShopPanel(client) {
+  if (!ENV.SHOP_CHANNEL_ID) throw new Error("Missing ENV.SHOP_CHANNEL_ID");
+  const ch = await client.channels.fetch(ENV.SHOP_CHANNEL_ID);
+  const payload = buildShopPanel();
+
+  // ส่ง panel ใหม่ (ปลอดภัยสุด เพราะ message เก่าอาจมี customId/version เก่า)
+  const sent = await ch.send(payload);
+
+  // พยายามปักหมุด (ถ้ามีสิทธิ์)
+  await sent.pin().catch(() => {});
+  return sent;
+}
+
 
 export async function routeInteraction(interaction) {
   try {
@@ -82,9 +98,24 @@ export async function routeInteraction(interaction) {
           return interaction.editReply("```env\n" + safe + "\n```");
         }
 
+        if (id === "admin:rebuild_shop") {
+          const sent = await rebuildShopPanel(interaction.client);
+          return interaction.editReply(`✅ ส่ง Shop Panel ใหม่แล้ว\n${sent.url}\n\nℹ️ แนะนำให้ลบ/ปลดหมุด Shop Panel เก่าในห้อง donate-shop เพื่อกันคนกดอันเก่า`);
+        }
+
+
         if (id === "admin:rebuild_panels") {
-          // placeholder: ถ้าคุณอยากให้สร้าง shop panel ใหม่จริง ๆ จะต่อในขั้นถัดไป
-          return interaction.editReply("✅ (TODO) Rebuild Panels: ยังไม่ได้ผูกฟังก์ชันสร้าง panel");
+          const sent = await rebuildShopPanel(interaction.client).catch((e) => {
+            throw new Error("Rebuild Shop Panel failed: " + (e?.message || String(e)));
+          });
+
+          // refresh dashboard message ด้วย
+          const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
+          const msg = await ch.messages.fetch(ENV.ADMIN_DASHBOARD_MESSAGE_ID);
+          const payload = await buildAdminDashboardMessage(interaction.client);
+          await msg.edit(payload);
+
+          return interaction.editReply(`✅ Rebuild Panels เสร็จแล้ว\n- Shop Panel: ${sent.url}\n- Dashboard: refreshed`);
         }
 
         return interaction.editReply("⚠️ ไม่รู้จักปุ่มนี้");

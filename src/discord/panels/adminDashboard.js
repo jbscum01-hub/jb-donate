@@ -149,6 +149,11 @@ export async function buildAdminDashboardMessage(client) {
       .setStyle(ButtonStyle.Secondary),
 
     new ButtonBuilder()
+      .setCustomId("admin:rebuild_shop")
+      .setLabel("🛒 Rebuild Shop Panel")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
       .setCustomId("admin:show_env")
       .setLabel("🔐 Show Config")
       .setStyle(ButtonStyle.Danger)
