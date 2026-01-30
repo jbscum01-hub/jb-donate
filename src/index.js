@@ -11,6 +11,7 @@ import { routeInteraction } from "./discord/router.js";
 import { ENV } from "./config/env.js";
 import { IDS } from "./config/constants.js";
 import { runVipTick } from "./jobs/vipRunner.js";
+import { buildAdminDashboardMessage } from "./discord/panels/adminDashboard.js";
 
 const client = createClient();
 
@@ -56,10 +57,8 @@ async function ensureAdminDashboardMessage(client) {
     return null;
   }
 
-  // ข้อความเริ่มต้น (เอาไว้สร้าง Message ID ก่อน)
-  const payload = {
-    content: "🛠️ **Admin Dashboard**\n(ข้อความนี้สร้างอัตโนมัติเพื่อใช้เป็น Dashboard หลัก)",
-  };
+  // สร้าง payload dashboard (Embed + Buttons)
+  const payload = await buildAdminDashboardMessage(client);
 
   const existingId = process.env.ADMIN_DASHBOARD_MESSAGE_ID;
 

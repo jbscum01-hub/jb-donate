@@ -11,6 +11,11 @@ import { cancelOrder } from "./handlers/staff.cancel.js";
 
 import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
 
+import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
+import { isAdmin } from "../domain/permissions.js";
+import { ENV } from "../config/env.js";
+import { runVipTick } from "../jobs/vipRunner.js";
+
 export async function routeInteraction(interaction) {
   try {
     // Select menus
@@ -33,6 +38,57 @@ export async function routeInteraction(interaction) {
     // Buttons
     if (interaction.isButton()) {
       const id = interaction.customId;
+
+
+      // ===== Admin Dashboard Buttons =====
+      if (id.startsWith("admin:")) {
+        if (!isAdmin(interaction.member)) {
+          return interaction.reply({ content: "❌ เฉพาะแอดมินเท่านั้น", ephemeral: true });
+        }
+
+        // กัน timeout
+        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+
+        if (id === "admin:refresh") {
+          const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
+          const msg = await ch.messages.fetch(ENV.ADMIN_DASHBOARD_MESSAGE_ID);
+          const payload = await buildAdminDashboardMessage(interaction.client);
+          await msg.edit(payload);
+          return interaction.editReply("✅ Refresh Dashboard แล้ว");
+        }
+
+        if (id === "admin:vip_tick") {
+          const r = await runVipTick(interaction.client);
+          return interaction.editReply(`✅ VIP Tick done: due=${r?.due ?? 0}, warn=${r?.warn ?? 0}, expired=${r?.expired ?? 0}`);
+        }
+
+        if (id === "admin:health") {
+          return interaction.editReply("🟢 Bot is running / gateway OK");
+        }
+
+        if (id === "admin:show_env") {
+          const safe = [
+            `GUILD_ID=${ENV.GUILD_ID}`,
+            `SHOP_CHANNEL_ID=${ENV.SHOP_CHANNEL_ID}`,
+            `QUEUE_CHANNEL_ID=${ENV.QUEUE_CHANNEL_ID}`,
+            `LOG_CHANNEL_ID=${ENV.LOG_CHANNEL_ID}`,
+            `VIP_LOG_CHANNEL_ID=${ENV.VIP_LOG_CHANNEL_ID}`,
+            `SLIP_ARCHIVE_CHANNEL_ID=${ENV.SLIP_ARCHIVE_CHANNEL_ID}`,
+            `ADMIN_ROLE_ID=${ENV.ADMIN_ROLE_ID}`,
+            `ADMIN_DASHBOARD_CHANNEL_ID=${ENV.ADMIN_DASHBOARD_CHANNEL_ID}`,
+            `ADMIN_DASHBOARD_MESSAGE_ID=${ENV.ADMIN_DASHBOARD_MESSAGE_ID}`,
+            `TICKET_CATEGORY_ID=${ENV.TICKET_CATEGORY_ID}`,
+          ].join("\n");
+          return interaction.editReply("```env\n" + safe + "\n```");
+        }
+
+        if (id === "admin:rebuild_panels") {
+          // placeholder: ถ้าคุณอยากให้สร้าง shop panel ใหม่จริง ๆ จะต่อในขั้นถัดไป
+          return interaction.editReply("✅ (TODO) Rebuild Panels: ยังไม่ได้ผูกฟังก์ชันสร้าง panel");
+        }
+
+        return interaction.editReply("⚠️ ไม่รู้จักปุ่มนี้");
+      }
 
       if (id.startsWith("staff_approve:")) return approveOrder(interaction);
       if (id.startsWith("staff_gen:")) return genCommands(interaction);
