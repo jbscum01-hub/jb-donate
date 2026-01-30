@@ -95,7 +95,44 @@ export const SQL = {
     where o.guild_id = $1;
   `,
 
+  
+  ,
   // =========================
+  // VIP Subscriptions
+  // - create/extend VIP and set next_grant_at
+  // params:
+  // $1 guild_id (varchar)
+  // $2 user_id (varchar)
+  // $3 vip_code (varchar)
+  // $4 role_id (varchar)
+  // $5 days_to_add (int)
+  // =========================
+  upsertVipSubscription: `
+    insert into vip_subscriptions (
+      guild_id, user_id, vip_code, role_id,
+      active, next_grant_at, expire_at, warned_24h
+    )
+    values (
+      $1::varchar,
+      $2::varchar,
+      $3::varchar,
+      $4::varchar,
+      true,
+      now(),
+      now() + ($5::int * interval '1 day'),
+      false
+    )
+    on conflict (guild_id, user_id, vip_code)
+    do update set
+      active = true,
+      role_id = excluded.role_id,
+      warned_24h = false,
+      expire_at = greatest(vip_subscriptions.expire_at, now())
+              + ($5::int * interval '1 day'),
+      next_grant_at = coalesce(vip_subscriptions.next_grant_at, now())
+    returning *;
+  `,
+// =========================
   // Vehicles
   // =========================
   upsertVehicle: `

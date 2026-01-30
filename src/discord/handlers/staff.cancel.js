@@ -15,7 +15,7 @@ export async function cancelOrder(interaction) {
   const order = await OrdersRepo.getByNo(orderNo);
   if (!order) return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
 
-  if (order.status === "CLOSED" || order.status === "CANCELED") {
+  if (order.status === "SUCCESS" || order.status === "CANCELLED") {
     return safeReply(interaction, { content: `ℹ️ สถานะปัจจุบัน: ${order.status}`, ephemeral: true });
   }
 
@@ -25,7 +25,7 @@ export async function cancelOrder(interaction) {
   const archiveCh = await interaction.client.channels.fetch(IDS.SLIP_ARCHIVE_CHANNEL_ID);
 
   const summary = [
-    "🧾 **TICKET SUMMARY (CANCELED)**",
+    "🧾 **TICKET SUMMARY (CANCELLED)**",
     `Order: **${order.order_no}**`,
     `Buyer: <@${order.user_id}> (${order.user_tag})`,
     `IGN: ${order.ign}`,
@@ -43,7 +43,7 @@ export async function cancelOrder(interaction) {
 
   await archiveCh.send(summary + "\n\n**Attachments:**\n" + attachList);
 
-  await OrdersRepo.setStatus(orderNo, "CANCELED", interaction.user.id);
+  await OrdersRepo.setStatus(orderNo, "CANCELLED", interaction.user.id);
 
   await AuditRepo.add({
     guild_id: interaction.guildId,
@@ -55,5 +55,5 @@ export async function cancelOrder(interaction) {
   });
 
   await safeReply(interaction, { content: "❌ ยกเลิกออเดอร์แล้ว กำลังลบห้อง…", ephemeral: true });
-  await ticketCh.delete("Ticket canceled").catch(() => {});
+  await ticketCh.delete("Ticket cancelled").catch(() => {});
 }
