@@ -1,5 +1,5 @@
 // src/discord/handlers/staff.setPlate.js
-import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from "discord.js";
+import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { isPlate6 } from "../../domain/validators.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
@@ -42,6 +42,10 @@ export async function setPlate(interaction) {
   // Modal submit
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
+  }
+
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   }
 
   const parts = interaction.customId.split(":"); // set_plate_modal:KIND:ORDERNO

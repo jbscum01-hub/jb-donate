@@ -1,4 +1,5 @@
 // src/discord/handlers/staff.close.js
+import { MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VehiclesRepo } from "../../db/repo/vehicles.repo.js";
@@ -45,6 +46,10 @@ async function refreshVehicleCard(client, plate, kind) {
 }
 
 export async function closeOrder(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }

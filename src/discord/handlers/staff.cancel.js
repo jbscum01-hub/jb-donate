@@ -1,4 +1,5 @@
 // src/discord/handlers/staff.cancel.js
+import { MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { AuditRepo } from "../../db/repo/audit.repo.js";
@@ -7,6 +8,10 @@ import { collectAllAttachments } from "../utils/attachments.js";
 import { safeReply } from "../utils/messages.js";
 
 export async function cancelOrder(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }

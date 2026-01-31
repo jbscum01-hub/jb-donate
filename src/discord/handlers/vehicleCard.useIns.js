@@ -1,3 +1,4 @@
+import { MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { VehiclesRepo } from "../../db/repo/vehicles.repo.js";
 import { InsuranceRepo } from "../../db/repo/insurance.repo.js";
@@ -9,6 +10,10 @@ import { safeReply } from "../utils/messages.js";
 // Router expects a handler named `useInsuranceFromCard`.
 // Keep the more descriptive name too (backward compatible).
 export async function useInsuranceFromCard(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }

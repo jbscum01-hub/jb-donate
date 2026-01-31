@@ -1,5 +1,5 @@
 // src/discord/handlers/order.modal.js
-import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } from "discord.js";
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags } from "discord.js";
 import { DONATE_PACKS, BOOSTS, VIP_PACKS } from "../../domain/catalog.js";
 import { isSteamId17, safeSlugUsername } from "../../domain/validators.js";
 import { nextOrderNo } from "../../domain/orderNo.js";
@@ -10,6 +10,10 @@ import { buildStaffPanel } from "../panels/staffPanel.js";
 import { safeReply } from "../utils/messages.js";
 
 export async function createOrderFromModal(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+
   try {
     const [_, type, code] = interaction.customId.split(":");
     const ign = interaction.fields.getTextInputValue("ign").trim();

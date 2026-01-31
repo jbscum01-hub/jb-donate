@@ -1,5 +1,5 @@
 // src/discord/handlers/shop.select.js
-import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from "discord.js";
+import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } from "discord.js";
 
 /**
  * Shop select -> open order modal (NO defer/reply before showModal)
@@ -12,7 +12,7 @@ export async function openOrderModal(interaction) {
 
     const raw = interaction.values?.[0];
     if (!raw || !raw.includes(":")) {
-      return interaction.reply({ content: "❌ ไม่พบแพ็กที่เลือก", ephemeral: true }).catch(() => {});
+      return interaction.reply({ content: "❌ ไม่พบแพ็กที่เลือก", flags: MessageFlags.Ephemeral }).catch(() => {});
     }
 
     const [type, code] = raw.split(":");
@@ -51,7 +51,7 @@ export async function openOrderModal(interaction) {
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: "❌ เปิดฟอร์มไม่สำเร็จ ลองใหม่อีกครั้ง",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       }).catch(() => {});
     }
   }

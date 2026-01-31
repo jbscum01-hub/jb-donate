@@ -1,5 +1,5 @@
 // src/discord/handlers/staff.approve.js
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VipRepo } from "../../db/repo/vip.repo.js";
@@ -22,6 +22,10 @@ function missingSelections(order) {
 }
 
 export async function approveOrder(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }

@@ -1,4 +1,5 @@
 // src/discord/router.js
+import { MessageFlags } from "discord.js";
 import { openOrderModal } from "./handlers/shop.select.js";
 import { createOrderFromModal } from "./handlers/order.modal.js";
 import { handleTicketVehicleSelect } from "./handlers/ticket.vehicle.select.js";
@@ -59,11 +60,11 @@ export async function routeInteraction(interaction) {
       // ===== Admin Dashboard Buttons =====
       if (id.startsWith("admin:")) {
         if (!isAdmin(interaction.member)) {
-          return interaction.reply({ content: "❌ เฉพาะแอดมินเท่านั้น", ephemeral: true });
+          return interaction.reply({ content: "❌ เฉพาะแอดมินเท่านั้น", flags: MessageFlags.Ephemeral });
         }
 
         // กัน timeout
-        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
         if (id === "admin:refresh") {
           const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
@@ -142,7 +143,7 @@ export async function routeInteraction(interaction) {
     console.error("routeInteraction error:", err);
     // try not to crash
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: "❌ มีข้อผิดพลาด (ดู log)", ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: "❌ มีข้อผิดพลาด (ดู log)", flags: MessageFlags.Ephemeral }).catch(() => {});
     }
   }
 }

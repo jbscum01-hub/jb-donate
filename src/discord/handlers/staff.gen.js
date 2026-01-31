@@ -1,3 +1,4 @@
+import { MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { AuditRepo } from "../../db/repo/audit.repo.js";
@@ -64,6 +65,10 @@ function buildTemplate(order) {
 }
 
 export async function genTemplate(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
   }
