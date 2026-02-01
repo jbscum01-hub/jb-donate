@@ -310,5 +310,18 @@ export async function buildAdminDashboardMessage(client) {
       .setStyle(ButtonStyle.Danger)
   );
 
-  return { content: "", embeds: [embed], components: [row1, row2] };
+  // Manual insurance (admin only)
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("admin:add_insurance:CAR")
+      .setLabel("➕ Add CAR Insurance")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("admin:add_insurance:BOAT")
+      .setLabel("➕ Add BOAT Insurance")
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return { content: "", embeds: [embed], components: [row1, row2, row3] };
 }

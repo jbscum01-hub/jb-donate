@@ -11,6 +11,7 @@ import { closeOrder } from "./handlers/staff.close.js";
 import { cancelOrder } from "./handlers/staff.cancel.js";
 
 import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
+import { openManualInsuranceModal, addManualInsuranceFromModal } from "./handlers/admin.addInsurance.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
 import { buildShopPanel } from "./panels/shopPanel.js";
@@ -46,6 +47,9 @@ export async function routeInteraction(interaction) {
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith("order_create:")) return createOrderFromModal(interaction);
 
+      // admin manual insurance
+      if (interaction.customId.startsWith("admin_add_insurance_modal:")) return addManualInsuranceFromModal(interaction);
+
       // plate modals
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
 
@@ -61,6 +65,11 @@ export async function routeInteraction(interaction) {
       if (id.startsWith("admin:")) {
         if (!isAdmin(interaction.member)) {
           return interaction.reply({ content: "❌ เฉพาะแอดมินเท่านั้น", flags: MessageFlags.Ephemeral });
+        }
+
+        // IMPORTANT: buttons that open modals MUST NOT defer/reply before showModal
+        if (id.startsWith("admin:add_insurance:")) {
+          return openManualInsuranceModal(interaction);
         }
 
         // กัน timeout

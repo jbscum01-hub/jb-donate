@@ -3,7 +3,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "disc
 
 export function buildVehicleCard({ plate, kind, model, ownerUserId, ownerTag, insurance }) {
   const embed = new EmbedBuilder()
-    .setTitle(`🚗 Vehicle Card`)
+    .setTitle(`Vehicle Card`)
     .addFields(
       { name: "ทะเบียน", value: plate, inline: true },
       { name: "Kind", value: kind, inline: true },
@@ -23,11 +23,12 @@ export function buildVehicleCard({ plate, kind, model, ownerUserId, ownerTag, in
   }
 
   const remain = insurance ? Math.max(0, (insurance.total ?? 0) - (insurance.used ?? 0)) : 0;
+  const expired = insurance?.expire_at ? (new Date(insurance.expire_at).getTime() <= Date.now()) : false;
   const btn = new ButtonBuilder()
     .setCustomId(`vehiclecard_useins:${plate}:${kind}`)
-    .setLabel("USE CAR INSURANCE")
+    .setLabel(kind === "BOAT" ? "USE BOAT INSURANCE" : "USE CAR INSURANCE")
     .setStyle(ButtonStyle.Primary)
-    .setDisabled(!insurance || remain <= 0);
+    .setDisabled(!insurance || remain <= 0 || expired);
 
   return {
     embeds: [embed],
