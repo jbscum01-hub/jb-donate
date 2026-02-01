@@ -236,6 +236,14 @@ export const SQL = {
   setVehicleCardMessageId: `
     update vehicles set plate_card_message_id=$2 where plate=$1 returning *
   `,
+  setVehicleOwner: `
+    update vehicles
+    set owner_user_id=$2,
+        owner_tag=$3,
+        updated_at=now()
+    where plate=$1
+    returning *
+  `,
 
   // =========================
   // Insurance

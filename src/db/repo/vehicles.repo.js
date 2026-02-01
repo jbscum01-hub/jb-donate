@@ -18,4 +18,9 @@ export const VehiclesRepo = {
     const { rows } = await pool.query(SQL.setVehicleCardMessageId, [plate, messageId]);
     return rows[0] ?? null;
   },
+
+  async setOwner(plate, owner_user_id, owner_tag) {
+    const { rows } = await pool.query(SQL.setVehicleOwner, [plate, owner_user_id, owner_tag]);
+    return rows[0] ?? null;
+  },
 };

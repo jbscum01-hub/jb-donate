@@ -22,6 +22,13 @@ function toInt(v) {
   return Number.isFinite(x) ? Math.floor(x) : NaN;
 }
 
+function parseUserId(input) {
+  const s = String(input || "").trim();
+  // <@123> or <@!123> or raw id
+  const m = s.match(/^<@!?([0-9]{17,20})>$/) || s.match(/^([0-9]{17,20})$/);
+  return m ? m[1] : null;
+}
+
 async function refreshVehicleCard(client, plate, kind) {
   const vehicle = await VehiclesRepo.getByPlate(plate);
   if (!vehicle) return null;
@@ -74,6 +81,13 @@ export async function openManualInsuranceModal(interaction) {
     .setStyle(TextInputStyle.Short)
     .setRequired(true);
 
+  const owner = new TextInputBuilder()
+    .setCustomId("owner")
+    .setLabel("Owner (แท็ก @คน หรือใส่ User ID)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("เช่น @TableTennis19 หรือ 1465...");
+
   const total = new TextInputBuilder()
     .setCustomId("total")
     .setLabel("จำนวนครั้ง (ทั้งหมดที่จะเพิ่ม)")
@@ -96,6 +110,7 @@ export async function openManualInsuranceModal(interaction) {
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(plate),
+    new ActionRowBuilder().addComponents(owner),
     new ActionRowBuilder().addComponents(total),
     new ActionRowBuilder().addComponents(days),
     new ActionRowBuilder().addComponents(note)
@@ -120,9 +135,18 @@ export async function addManualInsuranceFromModal(interaction) {
 
   const kind = interaction.customId.split(":")[1] === "BOAT" ? "BOAT" : "CAR";
   const plate = interaction.fields.getTextInputValue("plate").trim();
+  const ownerInput = interaction.fields.getTextInputValue("owner").trim();
   const total = toInt(interaction.fields.getTextInputValue("total"));
   const days = toInt(interaction.fields.getTextInputValue("days"));
   const note = (interaction.fields.getTextInputValue("note") || "").trim();
+
+  const ownerUserId = parseUserId(ownerInput);
+  if (!ownerUserId) {
+    return safeReply(interaction, {
+      content: "❌ Owner ต้องแท็ก @คน หรือใส่ User ID (ตัวเลข 17-20 หลัก)",
+      ephemeral: true,
+    });
+  }
 
   if (!isPlate6(plate)) {
     return safeReply(interaction, { content: "❌ ทะเบียนต้องเป็นตัวเลข 6 หลักเท่านั้น", ephemeral: true });
@@ -148,13 +172,26 @@ export async function addManualInsuranceFromModal(interaction) {
     });
   }
 
+  // Set / overwrite owner on vehicles so Vehicle Card can show it
+  const ownerMember = await interaction.guild.members.fetch(ownerUserId).catch(() => null);
+  if (!ownerMember) {
+    return safeReply(interaction, {
+      content: "❌ ไม่พบ Owner ในเซิร์ฟเวอร์นี้ (ลองแท็ก @คน หรือใส่ User ID ที่ถูกต้อง)",
+      ephemeral: true,
+    });
+  }
+
+  const ownerTag = ownerMember.user?.tag || `${ownerMember.user?.username ?? "unknown"}`;
+  const updatedVehicle = await VehiclesRepo.setOwner(plate, ownerUserId, ownerTag);
+  const vehicleAfterOwner = updatedVehicle ?? { ...vehicle, owner_user_id: ownerUserId, owner_tag: ownerTag };
+
   // Upsert (accumulate total + extend expiry)
   const ins = await InsuranceRepo.upsertInsurance({
     plate,
     kind,
     add_total: total,
     days,
-    order_no: vehicle.order_no ?? null,
+    order_no: vehicleAfterOwner.order_no ?? null,
     source: "MANUAL",
   });
 
@@ -164,8 +201,8 @@ export async function addManualInsuranceFromModal(interaction) {
     kind,
     action: "GRANT",
     delta: total,
-    order_no: vehicle.order_no ?? null,
-    user_id: vehicle.owner_user_id,
+    order_no: vehicleAfterOwner.order_no ?? null,
+    user_id: vehicleAfterOwner.owner_user_id,
     staff_id: interaction.user.id,
     note: note ? `manual grant: ${note}` : "manual grant",
   });
@@ -194,7 +231,7 @@ export async function addManualInsuranceFromModal(interaction) {
         .addFields(
           { name: "ทะเบียน", value: plate, inline: true },
           { name: "Kind", value: kind, inline: true },
-          { name: "Owner", value: `<@${vehicle.owner_user_id}> (${vehicle.owner_tag})`, inline: false },
+          { name: "Owner", value: `<@${vehicleAfterOwner.owner_user_id}> (${vehicleAfterOwner.owner_tag})`, inline: false },
           { name: "Insurance", value: `เหลือ **${remain}** / ทั้งหมด **${ins.total}**`, inline: false },
           { name: "Expire", value: exp, inline: true },
           { name: "Added", value: `+${total} ครั้ง, +${days} วัน`, inline: true },
