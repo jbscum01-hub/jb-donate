@@ -88,6 +88,13 @@ export async function openManualInsuranceModal(interaction) {
     .setRequired(true)
     .setPlaceholder("เช่น @TableTennis19 หรือ 1465...");
 
+  const model = new TextInputBuilder()
+    .setCustomId("model")
+    .setLabel("Model (รุ่นรถ/เรือ)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder(kind === "BOAT" ? "เช่น Motorboat" : "เช่น Rager");
+
   const total = new TextInputBuilder()
     .setCustomId("total")
     .setLabel("จำนวนครั้ง (ทั้งหมดที่จะเพิ่ม)")
@@ -102,18 +109,12 @@ export async function openManualInsuranceModal(interaction) {
     .setRequired(true)
     .setPlaceholder("เช่น 30");
 
-  const note = new TextInputBuilder()
-    .setCustomId("note")
-    .setLabel("หมายเหตุ (optional)")
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(false);
-
   modal.addComponents(
     new ActionRowBuilder().addComponents(plate),
     new ActionRowBuilder().addComponents(owner),
+    new ActionRowBuilder().addComponents(model),
     new ActionRowBuilder().addComponents(total),
-    new ActionRowBuilder().addComponents(days),
-    new ActionRowBuilder().addComponents(note)
+    new ActionRowBuilder().addComponents(days)
   );
 
   // IMPORTANT: do NOT defer/reply before showModal
@@ -136,9 +137,9 @@ export async function addManualInsuranceFromModal(interaction) {
   const kind = interaction.customId.split(":")[1] === "BOAT" ? "BOAT" : "CAR";
   const plate = interaction.fields.getTextInputValue("plate").trim();
   const ownerInput = interaction.fields.getTextInputValue("owner").trim();
+  const model = interaction.fields.getTextInputValue("model").trim();
   const total = toInt(interaction.fields.getTextInputValue("total"));
   const days = toInt(interaction.fields.getTextInputValue("days"));
-  const note = (interaction.fields.getTextInputValue("note") || "").trim();
 
   const ownerUserId = parseUserId(ownerInput);
   if (!ownerUserId) {
@@ -150,6 +151,9 @@ export async function addManualInsuranceFromModal(interaction) {
 
   if (!isPlate6(plate)) {
     return safeReply(interaction, { content: "❌ ทะเบียนต้องเป็นตัวเลข 6 หลักเท่านั้น", ephemeral: true });
+  }
+  if (!model) {
+    return safeReply(interaction, { content: "❌ กรุณากรอก Model (รุ่นรถ/เรือ)", ephemeral: true });
   }
   if (!Number.isFinite(total) || total <= 0) {
     return safeReply(interaction, { content: "❌ จำนวนครั้งต้องเป็นตัวเลขมากกว่า 0", ephemeral: true });
@@ -171,13 +175,12 @@ export async function addManualInsuranceFromModal(interaction) {
     }
 
     const ownerTag = ownerMember.user?.tag || `${ownerMember.user?.username ?? "unknown"}`;
-    const defaultModel = kind === "BOAT" ? "Unknown Boat" : "Unknown Car";
 
     vehicle = await VehiclesRepo.upsert({
       guild_id: interaction.guildId,
       plate,
       kind,
-      model: defaultModel,
+      model,
       owner_user_id: ownerUserId,
       owner_tag: ownerTag,
       order_no: null,
@@ -191,7 +194,7 @@ export async function addManualInsuranceFromModal(interaction) {
       actor_tag: interaction.user.tag,
       action: "VEHICLE_AUTO_REGISTER",
       target: plate,
-      meta: { kind, model: defaultModel, owner_user_id: ownerUserId, owner_tag: ownerTag },
+      meta: { kind, model, owner_user_id: ownerUserId, owner_tag: ownerTag },
     });
   }
 
@@ -202,7 +205,7 @@ export async function addManualInsuranceFromModal(interaction) {
     });
   }
 
-  // Set / overwrite owner on vehicles so Vehicle Card can show it
+  // Set / overwrite owner + model on vehicles so Vehicle Card can show it
   const ownerMember = await interaction.guild.members.fetch(ownerUserId).catch(() => null);
   if (!ownerMember) {
     return safeReply(interaction, {
@@ -212,8 +215,16 @@ export async function addManualInsuranceFromModal(interaction) {
   }
 
   const ownerTag = ownerMember.user?.tag || `${ownerMember.user?.username ?? "unknown"}`;
-  const updatedVehicle = await VehiclesRepo.setOwner(plate, ownerUserId, ownerTag);
-  const vehicleAfterOwner = updatedVehicle ?? { ...vehicle, owner_user_id: ownerUserId, owner_tag: ownerTag };
+  const vehicleAfterOwner = await VehiclesRepo.upsert({
+    guild_id: interaction.guildId,
+    plate,
+    kind,
+    model,
+    owner_user_id: ownerUserId,
+    owner_tag: ownerTag,
+    order_no: vehicle.order_no ?? null,
+    registered_by: vehicle.registered_by ?? interaction.user.id,
+  });
 
   // Upsert (accumulate total + extend expiry)
   const ins = await InsuranceRepo.upsertInsurance({
@@ -234,7 +245,7 @@ export async function addManualInsuranceFromModal(interaction) {
     order_no: vehicleAfterOwner.order_no ?? null,
     user_id: vehicleAfterOwner.owner_user_id,
     staff_id: interaction.user.id,
-    note: note ? `manual grant: ${note}` : "manual grant",
+    note: "manual grant",
   });
 
   const refreshed = await refreshVehicleCard(interaction.client, plate, kind);
@@ -245,7 +256,7 @@ export async function addManualInsuranceFromModal(interaction) {
     actor_tag: interaction.user.tag,
     action: "INSURANCE_MANUAL_GRANT",
     target: plate,
-    meta: { kind, add_total: total, days, note: note || null, vehicle_card_message_id: refreshed?.messageId ?? null },
+    meta: { kind, model, add_total: total, days, vehicle_card_message_id: refreshed?.messageId ?? null },
   });
 
   // Send log (best effort) with donate-like format
@@ -261,13 +272,13 @@ export async function addManualInsuranceFromModal(interaction) {
         .addFields(
           { name: "ทะเบียน", value: plate, inline: true },
           { name: "Kind", value: kind, inline: true },
+          { name: "Model", value: model, inline: true },
           { name: "Owner", value: `<@${vehicleAfterOwner.owner_user_id}> (${vehicleAfterOwner.owner_tag})`, inline: false },
           { name: "Insurance", value: `เหลือ **${remain}** / ทั้งหมด **${ins.total}**`, inline: false },
           { name: "Expire", value: exp, inline: true },
           { name: "Added", value: `+${total} ครั้ง, +${days} วัน`, inline: true },
           { name: "By", value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: false },
         );
-      if (note) logEmbed.addFields({ name: "Note", value: note, inline: false });
       await logCh.send({ embeds: [logEmbed] }).catch(() => {});
     }
   } catch {}
