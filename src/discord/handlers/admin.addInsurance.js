@@ -158,13 +158,43 @@ export async function addManualInsuranceFromModal(interaction) {
     return safeReply(interaction, { content: "❌ จำนวนวันต้องเป็นตัวเลขมากกว่า 0", ephemeral: true });
   }
 
-  const vehicle = await VehiclesRepo.getByPlate(plate);
+  let vehicle = await VehiclesRepo.getByPlate(plate);
+
+  // Auto-register vehicle if not found (admin-only flow)
   if (!vehicle) {
-    return safeReply(interaction, {
-      content: `❌ ไม่พบทะเบียน ${plate} ในระบบ\nℹ️ ต้องลงทะเบียนทะเบียน (Vehicle Card) ก่อน จึงจะเพิ่มประกันได้`,
-      ephemeral: true,
+    const ownerMember = await interaction.guild.members.fetch(ownerUserId).catch(() => null);
+    if (!ownerMember) {
+      return safeReply(interaction, {
+        content: "❌ ไม่พบ Owner ในเซิร์ฟเวอร์นี้ (ลองแท็ก @คน หรือใส่ User ID ที่ถูกต้อง)",
+        ephemeral: true,
+      });
+    }
+
+    const ownerTag = ownerMember.user?.tag || `${ownerMember.user?.username ?? "unknown"}`;
+    const defaultModel = kind === "BOAT" ? "Unknown Boat" : "Unknown Car";
+
+    vehicle = await VehiclesRepo.upsert({
+      guild_id: interaction.guildId,
+      plate,
+      kind,
+      model: defaultModel,
+      owner_user_id: ownerUserId,
+      owner_tag: ownerTag,
+      order_no: null,
+      registered_by: interaction.user.id,
+    });
+
+    // best-effort audit
+    await AuditRepo.add({
+      guild_id: interaction.guildId,
+      actor_id: interaction.user.id,
+      actor_tag: interaction.user.tag,
+      action: "VEHICLE_AUTO_REGISTER",
+      target: plate,
+      meta: { kind, model: defaultModel, owner_user_id: ownerUserId, owner_tag: ownerTag },
     });
   }
+
   if (vehicle.kind !== kind) {
     return safeReply(interaction, {
       content: `❌ ทะเบียน ${plate} เป็นชนิด ${vehicle.kind} แต่คุณกำลังเพิ่ม ${kind}`,
