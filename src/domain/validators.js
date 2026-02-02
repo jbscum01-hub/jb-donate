@@ -2,9 +2,11 @@ export function isSteamId17(s) {
   return /^[0-9]{17}$/.test(String(s ?? "").trim());
 }
 
-export function isPlate6(s) {
-  return /^[0-9]{6}$/.test(String(s ?? "").trim());
+// src/domain/validators.js
+export function isPlate6(v) {
+  return String(v || "").trim().length > 0;
 }
+
 
 export function safeSlugUsername(name) {
   return String(name ?? "user")
