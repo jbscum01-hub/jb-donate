@@ -62,6 +62,8 @@ async function refreshVehicleCard(client, plate, kind) {
 
 // ===== Button: open modal =====
 export async function openManualInsuranceModal(interaction) {
+  try {
+
   if (!interaction.isButton()) return;
   if (!isAdmin(interaction.member)) {
     return safeReply(interaction, { content: "❌ เฉพาะแอดมินเท่านั้น", ephemeral: true });
@@ -77,7 +79,7 @@ export async function openManualInsuranceModal(interaction) {
 
   const plate = new TextInputBuilder()
     .setCustomId("plate")
-    .setLabel(kind === "BOAT" ? "ทะเบียนเรือ (ตัวเลข 6 หลัก)" : "ทะเบียนรถ (ตัวเลข 6 หลัก)")
+    .setLabel(kind === "BOAT" ? "ทะเบียนเรือ" : "ทะเบียนรถ")
     .setStyle(TextInputStyle.Short)
     .setRequired(true);
 
@@ -119,10 +121,21 @@ export async function openManualInsuranceModal(interaction) {
 
   // IMPORTANT: do NOT defer/reply before showModal
   return interaction.showModal(modal);
+  } catch (err) {
+    console.error("openManualInsuranceModal error:", err);
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
+    } catch {}
+    return safeReply(interaction, { content: "❌ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง", ephemeral: true });
+  }
 }
 
 // ===== Modal submit: grant insurance =====
 export async function addManualInsuranceFromModal(interaction) {
+  try {
+
   if (!interaction.isModalSubmit()) return;
   if (!interaction.customId.startsWith("admin_add_insurance_modal:")) return;
 
@@ -131,7 +144,7 @@ export async function addManualInsuranceFromModal(interaction) {
   }
 
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    await interaction.deferReply({ ephemeral: true }).catch(() => {});
   }
 
   const kind = interaction.customId.split(":")[1] === "BOAT" ? "BOAT" : "CAR";
@@ -150,7 +163,7 @@ export async function addManualInsuranceFromModal(interaction) {
   }
 
   if (!isPlate6(plate)) {
-    return safeReply(interaction, { content: "❌ ทะเบียนต้องเป็นตัวเลข 6 หลักเท่านั้น", ephemeral: true });
+    return safeReply(interaction, { content: "❌ กรุณากรอกทะเบียน", ephemeral: true });
   }
   if (!model) {
     return safeReply(interaction, { content: "❌ กรุณากรอก Model (รุ่นรถ/เรือ)", ephemeral: true });
@@ -287,4 +300,13 @@ export async function addManualInsuranceFromModal(interaction) {
     content: `✅ เพิ่มประกัน ${kind} ให้ทะเบียน ${plate} แล้ว (+${total} ครั้ง / +${days} วัน)\n📌 Vehicle Card: <#${IDS.VEHICLE_PLATE_LOG_CHANNEL_ID}>`,
     ephemeral: true,
   });
+  } catch (err) {
+    console.error("addManualInsuranceFromModal error:", err);
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
+    } catch {}
+    return safeReply(interaction, { content: "❌ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง", ephemeral: true });
+  }
 }

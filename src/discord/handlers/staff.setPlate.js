@@ -17,6 +17,8 @@ function pickKindFromButton(customId) {
 }
 
 export async function setPlate(interaction) {
+  try {
+
   // Button opens modal; modal submit saves plate.
   if (interaction.isButton()) {
     if (!isAdmin(interaction.member)) {
@@ -31,7 +33,7 @@ export async function setPlate(interaction) {
 
     const plate = new TextInputBuilder()
       .setCustomId("plate")
-      .setLabel(kind === "BOAT" ? "ทะเบียนเรือ (ตัวเลข 6 หลัก)" : "ทะเบียนรถ (ตัวเลข 6 หลัก)")
+      .setLabel(kind === "BOAT" ? "ทะเบียนเรือ" : "ทะเบียนรถ")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
@@ -45,7 +47,7 @@ export async function setPlate(interaction) {
   }
 
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.deferReply({ ephemeral: true });
   }
 
   const parts = interaction.customId.split(":"); // set_plate_modal:KIND:ORDERNO
@@ -54,7 +56,7 @@ export async function setPlate(interaction) {
 
   const plate = interaction.fields.getTextInputValue("plate").trim();
   if (!isPlate6(plate)) {
-    return safeReply(interaction, { content: "❌ ทะเบียนต้องเป็นตัวเลข 6 หลักเท่านั้น", ephemeral: true });
+    return safeReply(interaction, { content: "❌ กรุณากรอกทะเบียน", ephemeral: true });
   }
 
   const order = await OrdersRepo.getByNo(orderNo);
@@ -129,4 +131,13 @@ export async function setPlate(interaction) {
     content: `✅ บันทึกทะเบียน ${plate} (${kind}) และอัปเดต Vehicle Card แล้ว`,
     ephemeral: true
   });
+  } catch (err) {
+    console.error("setPlate error:", err);
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
+    } catch {}
+    return safeReply(interaction, { content: "❌ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง", ephemeral: true });
+  }
 }
