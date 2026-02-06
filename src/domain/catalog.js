@@ -4,12 +4,10 @@ export const DONATE_PACKS = {
     // ใช้โชว์ใน Ticket/Log
     displayItems: [
       "SCUM$ 10,000",
-      "Phoenix Tears x2",
     ],
     // ใช้สำหรับคำสั่งเสก (ถ้าชื่อไอเทมไม่ตรงเซิร์ฟคุณ ให้แก้ id ทางขวา)
     spawnItems: [
       "#spawnitem Cash 1 StackCount 10000",
-      "#spawnitem Phoenix_Tears 2",
     ],
     vehicleChoices: [],
     boatChoices: [],
@@ -21,11 +19,11 @@ export const DONATE_PACKS = {
     price: 100,
     displayItems: [
       "SCUM$ 25,000",
-      "Phoenix Tears x5",
+      "Phoenix Tears x1",
     ],
     spawnItems: [
       "#spawnitem Cash 1 StackCount 25000",
-      "#spawnitem Phoenix_Tears 5",
+      "#spawnitem Phoenix_Tears 1",
     ],
     vehicleChoices: [],
     boatChoices: [],
@@ -37,15 +35,15 @@ export const DONATE_PACKS = {
     price: 200,
     displayItems: [
       "SCUM$ 50,000",
-      "Phoenix Tears x13",
-      "Bunker Key Card x2",
+      "Phoenix Tears x3",
+      "Bunker Key Card x1",
       "เลือกรถ 1 คัน (Sidecar / RIS)",
       "ประกันรถ 1 ครั้ง (อายุ 7 วัน)",
     ],
     spawnItems: [
       "#spawnitem Cash 1 StackCount 50000",
-      "#spawnitem Phoenix_Tears 13",
-      "#spawnitem KeyCard 2",
+      "#spawnitem Phoenix_Tears 3",
+      "#spawnitem KeyCard 1",
     ],
     vehicleChoices: ["Sidecar", "RIS"],
     boatChoices: [],
@@ -57,7 +55,7 @@ export const DONATE_PACKS = {
     price: 350,
     displayItems: [
       "SCUM$ 100,000",
-      "Phoenix Tears x26",
+      "Phoenix Tears x7",
       "Screwdriver x5",
       "Lockpick Advanced x5",
       "Bunker Key Card x3",
@@ -68,7 +66,7 @@ export const DONATE_PACKS = {
     ],
     spawnItems: [
       "#spawnitem Cash 1 StackCount 100000",
-      "#spawnitem Phoenix_Tears 26",
+      "#spawnitem Phoenix_Tears 7",
       "#spawnitem Screwdriver 5",
       "#spawnitem Lockpick_Advanced 5",
       "#spawnitem KeyCard 3",
@@ -83,7 +81,7 @@ export const DONATE_PACKS = {
     price: 500,
     displayItems: [
       "SCUM$ 200,000",
-      "Phoenix Tears x35",
+      "Phoenix Tears x10",
       "Screwdriver x13",
       "Food & Water Set x10",
       "Lockpick Advanced x13",
