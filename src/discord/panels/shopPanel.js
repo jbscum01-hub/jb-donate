@@ -58,21 +58,21 @@ export function buildShopPanel() {
       //  description: "Boost Package • 399",
       //  value: "BOOST:ELITE_OPERATOR",
       //},
-      {
-        label: "🟢 VIP BASIC",
-        description: "VIP Package • 199",
-        value: "VIP:BASIC",
-      },
-      {
-        label: "🔵 VIP PRO",
-        description: "VIP Package • 300",
-        value: "VIP:PRO",
-      },
-      {
-        label: "🔴 VIP ELITE",
-        description: "VIP Package • 500",
-        value: "VIP:ELITE",
-      }
+      //{
+      //  label: "🟢 VIP BASIC",
+      //  description: "VIP Package • 199",
+      //  value: "VIP:BASIC",
+      //},
+      //{
+      //  label: "🔵 VIP PRO",
+      //  description: "VIP Package • 300",
+      //   value: "VIP:PRO",
+      // },
+      //{
+      //   label: "🔴 VIP ELITE",
+      //   description: "VIP Package • 500",
+      //   value: "VIP:ELITE",
+      // }
     );
 
   return {
