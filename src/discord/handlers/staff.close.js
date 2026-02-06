@@ -62,37 +62,15 @@ export async function closeOrder(interaction) {
     return safeReply(interaction, { content: "❌ ต้อง APPROVE ก่อนจึงจะ CLOSE ได้", ephemeral: true });
   }
 
-  // ===== Validate plates (Rule A) =====
-  if (order.type === "DONATE") {
-    const { requireCar, requireBoat } = requiredPlatesForDonate(order);
-
-    if (requireCar && !order.car_plate) {
-      return safeReply(interaction, {
-        content: "❌ ต้อง SET CAR PLATE (ทะเบียนรถ 6 หลัก) ก่อนปิดงาน",
-        ephemeral: true
-      });
-    }
-    if (requireBoat && !order.boat_plate) {
-      return safeReply(interaction, {
-        content: "❌ ต้อง SET BOAT PLATE (ทะเบียนเรือ 6 หลัก) ก่อนปิดงาน",
-        ephemeral: true
-      });
-    }
-  }
+  // NOTE: Plate is no longer required to close an order.
 
   // ===== Grant insurance at CLOSE (DONATE only) =====
   if (order.type === "DONATE") {
     const { pack: p } = requiredPlatesForDonate(order);
 
     // CAR insurance
-    if (p?.carInsurance) {
-      if (!order.car_plate) {
-        return safeReply(interaction, {
-          content: "❌ แพ็กนี้มีประกันรถ ต้อง SET CAR PLATE ก่อน",
-          ephemeral: true
-        });
-      }
-
+    // If plate is missing, skip granting (order can still be closed).
+    if (p?.carInsurance && order.car_plate) {
       await InsuranceRepo.upsertInsurance({
         plate: order.car_plate,
         kind: "CAR",
@@ -118,14 +96,8 @@ export async function closeOrder(interaction) {
     }
 
     // BOAT insurance
-    if (p?.boatInsurance) {
-      if (!order.boat_plate) {
-        return safeReply(interaction, {
-          content: "❌ แพ็กนี้มีประกันเรือ ต้อง SET BOAT PLATE ก่อน",
-          ephemeral: true
-        });
-      }
-
+    // If plate is missing, skip granting (order can still be closed).
+    if (p?.boatInsurance && order.boat_plate) {
       await InsuranceRepo.upsertInsurance({
         plate: order.boat_plate,
         kind: "BOAT",
@@ -153,13 +125,7 @@ export async function closeOrder(interaction) {
 
     // ===== Grant insurance at CLOSE (VIP) =====
   if (order.type === "VIP") {
-    // ต้องมีทะเบียนรถเพื่อผูกประกัน
-    if (!order.car_plate) {
-      return safeReply(interaction, {
-        content: "❌ VIP ต้อง SET CAR PLATE (ทะเบียนรถ 6 หลัก) ก่อนปิดงาน",
-        ephemeral: true
-      });
-    }
+    // Plate is optional. If not provided, we'll skip granting insurance.
 
     // ตั้งค่าประกัน VIP (ปรับเลข days ได้ตามต้องการ)
     // - BASIC/PRO: เพิ่มตามแพ็ก
@@ -180,28 +146,30 @@ export async function closeOrder(interaction) {
       return safeReply(interaction, { content: "❌ VIP แพ็กนี้ยังไม่ตั้งค่า Insurance", ephemeral: true });
     }
 
-    await InsuranceRepo.upsertInsurance({
-      plate: order.car_plate,
-      kind: "CAR",
-      add_total: cfg.add_total,  // ✅ สะสมเพิ่ม
-      days: cfg.days,            // ✅ มี expire_at ทุกแพ็ก
-      order_no: orderNo,
-      source: "VIP_PACK",
-    });
+    if (order.car_plate) {
+      await InsuranceRepo.upsertInsurance({
+        plate: order.car_plate,
+        kind: "CAR",
+        add_total: cfg.add_total,  // ✅ สะสมเพิ่ม
+        days: cfg.days,            // ✅ มี expire_at ทุกแพ็ก
+        order_no: orderNo,
+        source: "VIP_PACK",
+      });
 
-    await InsuranceRepo.log({
-      guild_id: interaction.guildId,
-      plate: order.car_plate,
-      kind: "CAR",
-      action: "GRANT",
-      delta: cfg.add_total,
-      order_no: orderNo,
-      user_id: order.user_id,
-      staff_id: interaction.user.id,
-      note: `grant at CLOSE (VIP:${order.pack_code})`,
-    });
+      await InsuranceRepo.log({
+        guild_id: interaction.guildId,
+        plate: order.car_plate,
+        kind: "CAR",
+        action: "GRANT",
+        delta: cfg.add_total,
+        order_no: orderNo,
+        user_id: order.user_id,
+        staff_id: interaction.user.id,
+        note: `grant at CLOSE (VIP:${order.pack_code})`,
+      });
 
-    await refreshVehicleCard(interaction.client, order.car_plate, "CAR");
+      await refreshVehicleCard(interaction.client, order.car_plate, "CAR");
+    }
   }
 
   // ===== Archive attachments (all) =====

@@ -1,7 +1,7 @@
 // src/discord/handlers/staff.setPlate.js
 import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
-import { isPlate6 } from "../../domain/validators.js";
+// NOTE: Plate is no longer validated to 6 chars; allow any length or empty.
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VehiclesRepo } from "../../db/repo/vehicles.repo.js";
 import { InsuranceRepo } from "../../db/repo/insurance.repo.js";
@@ -33,9 +33,9 @@ export async function setPlate(interaction) {
 
     const plate = new TextInputBuilder()
       .setCustomId("plate")
-      .setLabel(kind === "BOAT" ? "ทะเบียนเรือ" : "ทะเบียนรถ")
+      .setLabel(kind === "BOAT" ? "ทะเบียนเรือ (ไม่กรอกก็ได้)" : "ทะเบียนรถ (ไม่กรอกก็ได้)")
       .setStyle(TextInputStyle.Short)
-      .setRequired(true);
+      .setRequired(false);
 
     modal.addComponents(new ActionRowBuilder().addComponents(plate));
     return interaction.showModal(modal);
@@ -55,8 +55,14 @@ export async function setPlate(interaction) {
   const orderNo = parts[2];
 
   const plate = interaction.fields.getTextInputValue("plate").trim();
-  if (!isPlate6(plate)) {
-    return safeReply(interaction, { content: "❌ กรุณากรอกทะเบียน", ephemeral: true });
+
+  // ✅ ไม่บังคับกรอก + กรอกกี่ตัวก็ได้
+  // ถ้าไม่กรอก → ไม่ต้องทำอะไร (ข้ามการบันทึก)
+  if (!plate) {
+    return safeReply(interaction, {
+      content: "⚠️ ยังไม่ได้ตั้งทะเบียน (สามารถตั้งทีหลังได้)",
+      ephemeral: true,
+    });
   }
 
   const order = await OrdersRepo.getByNo(orderNo);
