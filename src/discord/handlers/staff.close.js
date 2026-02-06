@@ -191,11 +191,23 @@ export async function closeOrder(interaction) {
     `Time: <t:${Math.floor(Date.now() / 1000)}:f>`,
   ].join("\n");
 
-  const attachList = attachments.length
-    ? attachments.map(a => `- ${a.name} (${a.contentType ?? "file"}): ${a.url}`).join("\n")
-    : "- (no attachments)";
+  // ===== Archive attachments (re-upload so links never expire) =====
+  const files = attachments.map(a => ({ attachment: a.url, name: a.name }));
 
-  await archiveCh.send(summary + "\n\n**Attachments:**\n" + attachList);
+  // Discord limits files per message; send in chunks to keep previews working.
+  const chunkSize = 10;
+  if (!files.length) {
+    await archiveCh.send(summary + "\n\n**Attachments:**\n- (no attachments)");
+  } else {
+    const total = files.length;
+    for (let i = 0; i < files.length; i += chunkSize) {
+      const chunk = files.slice(i, i + chunkSize);
+      const header = i === 0
+        ? `${summary}\n\n📎 **Attachments:** ${total} file(s)`
+        : `📎 **Attachments (cont.)** ${i + 1}-${Math.min(i + chunkSize, total)} / ${total}`;
+      await archiveCh.send({ content: header, files: chunk });
+    }
+  }
 
   // ===== Update order status =====
   await OrdersRepo.setStatus(orderNo, "SUCCESS", interaction.user.id);
