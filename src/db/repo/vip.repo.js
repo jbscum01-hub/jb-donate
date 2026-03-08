@@ -87,7 +87,7 @@ export const VipRepo = {
       userId,
       vipCode,
       roleId,
-      Number(daysToAdd) || 30,
+      Number(daysToAdd) || 999,
     ]);
     return rows[0] ?? null;
   },

@@ -38,7 +38,7 @@ export const DONATE_PACKS = {
       "Phoenix Tears x3",
       "Bunker Key Card x1",
       "เลือกรถ 1 คัน (Sidecar / RIS)",
-      "ประกันรถ 1 ครั้ง (อายุ 7 วัน)",
+      "ประกันรถ 1 ครั้ง (อายุ 999 วัน)",
     ],
     spawnItems: [
       "#spawnitem Cash 1 StackCount 50000",
@@ -47,7 +47,7 @@ export const DONATE_PACKS = {
     ],
     vehicleChoices: ["Sidecar", "RIS"],
     boatChoices: [],
-    carInsurance: { total: 1, days: 7 },
+    carInsurance: { total: 1, days: 999 },
     boatInsurance: null,
   },
 
@@ -60,9 +60,9 @@ export const DONATE_PACKS = {
       "Lockpick Advanced x5",
       "Bunker Key Card x3",
       "เลือกรถ 1 คัน (Sidecar / RIS / Laika / Wolfs)",
-      "ประกันรถ 3 ครั้ง (14 วัน)",
+      "ประกันรถ 3 ครั้ง (999 วัน)",
       "เลือกเรือ 1 ลำ (Motorboat)",
-      "ประกันเรือ 1 ครั้ง (14 วัน)",
+      "ประกันเรือ 1 ครั้ง (999 วัน)",
     ],
     spawnItems: [
       "#spawnitem Cash 1 StackCount 100000",
@@ -73,8 +73,8 @@ export const DONATE_PACKS = {
     ],
     vehicleChoices: ["Sidecar", "RIS", "Laika", "Wolfs"],
     boatChoices: ["Motorboat"],
-    carInsurance: { total: 3, days: 14 },
-    boatInsurance: { total: 1, days: 14 },
+    carInsurance: { total: 3, days: 999 },
+    boatInsurance: { total: 1, days: 999 },
   },
 
   DIAMOND: {
@@ -87,9 +87,9 @@ export const DONATE_PACKS = {
       "Lockpick Advanced x13",
       "Bunker Key Card x7",
       "เลือกรถ 1 คัน (Sidecar / RIS / Rager / Laika / Wolfs)",
-      "ประกันรถ 5 ครั้ง (30 วัน)",
+      "ประกันรถ 5 ครั้ง (999 วัน)",
       "เลือกเรือ 1 ลำ (Motorboat / Dinghy)",
-      "ประกันเรือ 3 ครั้ง (30 วัน)",
+      "ประกันเรือ 3 ครั้ง (999 วัน)",
     ],
     spawnItems: [
       "#spawnitem Cash 1 StackCount 200000",
@@ -102,8 +102,8 @@ export const DONATE_PACKS = {
     ],
     vehicleChoices: ["Sidecar", "RIS", "Rager", "Laika", "Wolfs"],
     boatChoices: ["Motorboat", "Dinghy"],
-    carInsurance: { total: 5, days: 30 },
-    boatInsurance: { total: 3, days: 30 },
+    carInsurance: { total: 5, days: 999 },
+    boatInsurance: { total: 3, days: 999 },
   },
 };
 
@@ -133,7 +133,7 @@ export const VEHICLE_COMMANDS = {
 export const VIP_PACKS = {
   BASIC: {
     price: 199,
-    days: 30,
+    days: 999,
     roleKey: "VIP_BASIC_ROLE_ID",
     displayItems: ["SCUM$ 20,000", "Bunker Key Card x2", "Phoenix Tears x3", "Screwdriver x5"],
     spawnItems: [
@@ -145,7 +145,7 @@ export const VIP_PACKS = {
   },
   PRO: {
     price: 300,
-    days: 30,
+    days: 999,
     roleKey: "VIP_PRO_ROLE_ID",
     displayItems: ["SCUM$ 30,000", "Bunker Key Card x5", "Phoenix Tears x10", "Screwdriver x20"],
     spawnItems: [
@@ -157,7 +157,7 @@ export const VIP_PACKS = {
   },
   ELITE: {
     price: 500,
-    days: 30,
+    days: 999,
     roleKey: "VIP_ELITE_ROLE_ID",
     displayItems: ["SCUM$ 50,000", "Bunker Key Card x10", "Phoenix Tears x25", "Screwdriver x40"],
     spawnItems: [
