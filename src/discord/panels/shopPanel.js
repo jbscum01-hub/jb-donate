@@ -22,11 +22,15 @@ function money(n) {
 
 function buildPackPreviewField(pack) {
   const title = `${iconForPack(pack.pack_code)} ${pack.pack_code} — ${money(pack.price)}`;
-  const lines = (pack.summary_lines?.length ? pack.summary_lines : ["กดเลือกแพ็กเพื่อดูรายละเอียดเต็ม"]).slice(0, 4);
+  const lines = (
+    pack.summary_lines?.length
+      ? pack.summary_lines
+      : ["กดเลือกแพ็กเพื่อดูรายละเอียดเต็ม"]
+  ).slice(0, 4);
+
   return {
     name: title.slice(0, 256),
-    value: lines.map((x) => `• ${x}`).join("
-").slice(0, 1024),
+    value: lines.map((x) => `• ${x}`).join("\n").slice(0, 1024),
     inline: false,
   };
 }
@@ -72,7 +76,9 @@ export async function buildShopPanel() {
   const previewEmbed = new EmbedBuilder()
     .setColor(0x2b2d31)
     .setTitle("📦 รายการแพ็กโดเนท")
-    .setDescription("ผู้เล่นสามารถดูภาพรวมทุกแพ็กได้ก่อน และกดเลือกจากเมนูด้านล่างเพื่อดูรายละเอียด/ซื้อแพ็ก");
+    .setDescription(
+      "ผู้เล่นสามารถดูภาพรวมทุกแพ็กได้ก่อน และกดเลือกจากเมนูด้านล่างเพื่อดูรายละเอียด/ซื้อแพ็ก"
+    );
 
   if (!packs.length) {
     previewEmbed.addFields({
