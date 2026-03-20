@@ -10,22 +10,30 @@ function normalizeSummary(pack, items = [], vehicles = [], boats = []) {
   const firstItems = items
     .slice(0, 2)
     .map((x) => `${x.item_name}${Number(x.quantity) > 1 ? ` x${x.quantity}` : ""}`);
-  if (firstItems.length) parts.push(firstItems.join(" + "));
+
+  if (firstItems.length) {
+    parts.push(firstItems.join(" + "));
+  }
 
   if (vehicles.length) {
     const carText = vehicles.length === 1 ? "รถ 1 คัน" : `เลือกรถ ${vehicles.length} แบบ`;
-    const ins = Number(pack.car_insurance_total || 0) > 0 ? ` + ประกัน ${Number(pack.car_insurance_total)} ครั้ง` : "";
+    const ins =
+      Number(pack.car_insurance_total || 0) > 0
+        ? ` + ประกัน ${Number(pack.car_insurance_total)} ครั้ง`
+        : "";
     parts.push(`${carText}${ins}`);
   }
 
   if (boats.length) {
     const boatText = boats.length === 1 ? "เรือ 1 คัน" : `เลือกเรือ ${boats.length} แบบ`;
-    const ins = Number(pack.boat_insurance_total || 0) > 0 ? ` + ประกัน ${Number(pack.boat_insurance_total)} ครั้ง` : "";
+    const ins =
+      Number(pack.boat_insurance_total || 0) > 0
+        ? ` + ประกัน ${Number(pack.boat_insurance_total)} ครั้ง`
+        : "";
     parts.push(`${boatText}${ins}`);
   }
 
-  return parts.join("
-") || "กดเลือกแพ็กเพื่อดูรายละเอียดเต็ม";
+  return parts.join("\n") || "กดเลือกแพ็กเพื่อดูรายละเอียดเต็ม";
 }
 
 export const DonatePackRepo = {
@@ -56,29 +64,30 @@ export const DonatePackRepo = {
 
     const packIds = packs.map((x) => x.pack_id);
 
-    const [{ rows: itemRows }, { rows: vehicleRows }, { rows: boatRows }] = await Promise.all([
-      pool.query(
-        `select pack_id, item_name, quantity, sort_order, pack_item_id
-         from tb_donate_pack_master_item
-         where pack_id = any($1::uuid[]) and is_active = true
-         order by pack_id asc, sort_order asc, pack_item_id asc`,
-        [packIds]
-      ),
-      pool.query(
-        `select pack_id, vehicle_name, insurance_total, insurance_days, sort_order, pack_vehicle_id
-         from tb_donate_pack_master_vehicle
-         where pack_id = any($1::uuid[]) and is_active = true
-         order by pack_id asc, sort_order asc, pack_vehicle_id asc`,
-        [packIds]
-      ),
-      pool.query(
-        `select pack_id, boat_name, insurance_total, insurance_days, sort_order, pack_boat_id
-         from tb_donate_pack_master_boat
-         where pack_id = any($1::uuid[]) and is_active = true
-         order by pack_id asc, sort_order asc, pack_boat_id asc`,
-        [packIds]
-      ),
-    ]);
+    const [{ rows: itemRows }, { rows: vehicleRows }, { rows: boatRows }] =
+      await Promise.all([
+        pool.query(
+          `select pack_id, item_name, quantity, sort_order, pack_item_id
+           from tb_donate_pack_master_item
+           where pack_id = any($1::uuid[]) and is_active = true
+           order by pack_id asc, sort_order asc, pack_item_id asc`,
+          [packIds]
+        ),
+        pool.query(
+          `select pack_id, vehicle_name, insurance_total, insurance_days, sort_order, pack_vehicle_id
+           from tb_donate_pack_master_vehicle
+           where pack_id = any($1::uuid[]) and is_active = true
+           order by pack_id asc, sort_order asc, pack_vehicle_id asc`,
+          [packIds]
+        ),
+        pool.query(
+          `select pack_id, boat_name, insurance_total, insurance_days, sort_order, pack_boat_id
+           from tb_donate_pack_master_boat
+           where pack_id = any($1::uuid[]) and is_active = true
+           order by pack_id asc, sort_order asc, pack_boat_id asc`,
+          [packIds]
+        ),
+      ]);
 
     const itemMap = new Map();
     const vehicleMap = new Map();
@@ -88,10 +97,12 @@ export const DonatePackRepo = {
       if (!itemMap.has(row.pack_id)) itemMap.set(row.pack_id, []);
       itemMap.get(row.pack_id).push(row);
     }
+
     for (const row of vehicleRows) {
       if (!vehicleMap.has(row.pack_id)) vehicleMap.set(row.pack_id, []);
       vehicleMap.get(row.pack_id).push(row);
     }
+
     for (const row of boatRows) {
       if (!boatMap.has(row.pack_id)) boatMap.set(row.pack_id, []);
       boatMap.get(row.pack_id).push(row);
@@ -105,8 +116,7 @@ export const DonatePackRepo = {
       return {
         ...pack,
         summary_lines: normalizeSummary(pack, items, vehicles, boats)
-          .split("
-")
+          .split("\n")
           .map((x) => x.trim())
           .filter(Boolean),
       };
@@ -142,6 +152,7 @@ export const DonatePackRepo = {
        limit 1`,
       [packCode]
     );
+
     return rows[0] ?? null;
   },
 
@@ -149,61 +160,64 @@ export const DonatePackRepo = {
     const pack = await this.getPackByCode(packCode);
     if (!pack) return null;
 
-    const [{ rows: benefitRows }, { rows: itemRows }, { rows: vehicleRows }, { rows: boatRows }] = await Promise.all([
-      pool.query(
-        `select benefit_text, sort_order
-         from tb_donate_pack_master_benefit
-         where pack_id = $1 and is_active = true
-         order by sort_order asc, benefit_id asc`,
-        [pack.pack_id]
-      ),
-      pool.query(
-        `select
-           item_code,
-           item_name,
-           item_spawn_name,
-           item_spawn_command_template,
-           quantity,
-           item_group,
-           sort_order
-         from tb_donate_pack_master_item
-         where pack_id = $1 and is_active = true
-         order by sort_order asc, pack_item_id asc`,
-        [pack.pack_id]
-      ),
-      pool.query(
-        `select
-           vehicle_code,
-           vehicle_name,
-           vehicle_model,
-           vehicle_kind,
-           spawn_command_template,
-           insurance_total,
-           insurance_days,
-           sort_order
-         from tb_donate_pack_master_vehicle
-         where pack_id = $1 and is_active = true
-         order by sort_order asc, pack_vehicle_id asc`,
-        [pack.pack_id]
-      ),
-      pool.query(
-        `select
-           boat_code,
-           boat_name,
-           boat_model,
-           spawn_command_template,
-           insurance_total,
-           insurance_days,
-           sort_order
-         from tb_donate_pack_master_boat
-         where pack_id = $1 and is_active = true
-         order by sort_order asc, pack_boat_id asc`,
-        [pack.pack_id]
-      ),
-    ]);
+    const [{ rows: benefitRows }, { rows: itemRows }, { rows: vehicleRows }, { rows: boatRows }] =
+      await Promise.all([
+        pool.query(
+          `select benefit_text, sort_order
+           from tb_donate_pack_master_benefit
+           where pack_id = $1 and is_active = true
+           order by sort_order asc, benefit_id asc`,
+          [pack.pack_id]
+        ),
+        pool.query(
+          `select
+             item_code,
+             item_name,
+             item_spawn_name,
+             item_spawn_command_template,
+             quantity,
+             item_group,
+             sort_order
+           from tb_donate_pack_master_item
+           where pack_id = $1 and is_active = true
+           order by sort_order asc, pack_item_id asc`,
+          [pack.pack_id]
+        ),
+        pool.query(
+          `select
+             vehicle_code,
+             vehicle_name,
+             vehicle_model,
+             vehicle_kind,
+             spawn_command_template,
+             insurance_total,
+             insurance_days,
+             sort_order
+           from tb_donate_pack_master_vehicle
+           where pack_id = $1 and is_active = true
+           order by sort_order asc, pack_vehicle_id asc`,
+          [pack.pack_id]
+        ),
+        pool.query(
+          `select
+             boat_code,
+             boat_name,
+             boat_model,
+             spawn_command_template,
+             insurance_total,
+             insurance_days,
+             sort_order
+           from tb_donate_pack_master_boat
+           where pack_id = $1 and is_active = true
+           order by sort_order asc, pack_boat_id asc`,
+          [pack.pack_id]
+        ),
+      ]);
 
     const benefits = benefitRows.map((x) => x.benefit_text).filter(Boolean);
-    const displayItems = itemRows.map((x) => `${x.item_name}${Number(x.quantity) > 1 ? ` x${x.quantity}` : ""}`);
+    const displayItems = itemRows.map(
+      (x) => `${x.item_name}${Number(x.quantity) > 1 ? ` x${x.quantity}` : ""}`
+    );
     const spawnItems = itemRows.map((x) => x.item_spawn_command_template).filter(Boolean);
 
     return {
@@ -213,8 +227,7 @@ export const DonatePackRepo = {
       displayItems,
       spawnItems,
       summary_lines: normalizeSummary(pack, itemRows, vehicleRows, boatRows)
-        .split("
-")
+        .split("\n")
         .map((x) => x.trim())
         .filter(Boolean),
       vehicleChoices: vehicleRows.map((x) => x.vehicle_name),
@@ -229,11 +242,17 @@ export const DonatePackRepo = {
       }, {}),
       carInsurance:
         Number(pack.car_insurance_total) > 0
-          ? { total: Number(pack.car_insurance_total), days: Number(pack.car_insurance_days) }
+          ? {
+              total: Number(pack.car_insurance_total),
+              days: Number(pack.car_insurance_days),
+            }
           : null,
       boatInsurance:
         Number(pack.boat_insurance_total) > 0
-          ? { total: Number(pack.boat_insurance_total), days: Number(pack.boat_insurance_days) }
+          ? {
+              total: Number(pack.boat_insurance_total),
+              days: Number(pack.boat_insurance_days),
+            }
           : null,
     };
   },
