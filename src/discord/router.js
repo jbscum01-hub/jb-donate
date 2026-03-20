@@ -1,4 +1,3 @@
-// src/discord/router.js
 import { MessageFlags } from "discord.js";
 import { openOrderModal } from "./handlers/shop.select.js";
 import { createOrderFromModal } from "./handlers/order.modal.js";
@@ -19,60 +18,42 @@ import { isAdmin } from "../domain/permissions.js";
 import { ENV } from "../config/env.js";
 import { runVipTick } from "../jobs/vipRunner.js";
 
-
 async function rebuildShopPanel(client) {
   if (!ENV.SHOP_CHANNEL_ID) throw new Error("Missing ENV.SHOP_CHANNEL_ID");
   const ch = await client.channels.fetch(ENV.SHOP_CHANNEL_ID);
-  const payload = buildShopPanel();
-
-  // ส่ง panel ใหม่ (ปลอดภัยสุด เพราะ message เก่าอาจมี customId/version เก่า)
+  const payload = await buildShopPanel();
   const sent = await ch.send(payload);
-
-  // พยายามปักหมุด (ถ้ามีสิทธิ์)
   await sent.pin().catch(() => {});
   return sent;
 }
 
-
 export async function routeInteraction(interaction) {
   try {
-    // Select menus
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "shop_select") return openOrderModal(interaction);
       if (interaction.customId.startsWith("ticket_model_select:")) return handleTicketVehicleSelect(interaction);
       return;
     }
 
-    // Modal submits
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith("order_create:")) return createOrderFromModal(interaction);
-
-      // admin manual insurance
       if (interaction.customId.startsWith("admin_add_insurance_modal:")) return addManualInsuranceFromModal(interaction);
-
-      // plate modals
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
-
       return;
     }
 
-    // Buttons
     if (interaction.isButton()) {
       const id = interaction.customId;
 
-
-      // ===== Admin Dashboard Buttons =====
       if (id.startsWith("admin:")) {
         if (!isAdmin(interaction.member)) {
           return interaction.reply({ content: "❌ เฉพาะแอดมินเท่านั้น", flags: MessageFlags.Ephemeral });
         }
 
-        // IMPORTANT: buttons that open modals MUST NOT defer/reply before showModal
         if (id.startsWith("admin:add_insurance:")) {
           return openManualInsuranceModal(interaction);
         }
 
-        // กัน timeout
         await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
         if (id === "admin:refresh") {
@@ -113,13 +94,11 @@ export async function routeInteraction(interaction) {
           return interaction.editReply(`✅ ส่ง Shop Panel ใหม่แล้ว\n${sent.url}\n\nℹ️ แนะนำให้ลบ/ปลดหมุด Shop Panel เก่าในห้อง donate-shop เพื่อกันคนกดอันเก่า`);
         }
 
-
         if (id === "admin:rebuild_panels") {
           const sent = await rebuildShopPanel(interaction.client).catch((e) => {
             throw new Error("Rebuild Shop Panel failed: " + (e?.message || String(e)));
           });
 
-          // refresh dashboard message ด้วย
           const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
           const msg = await ch.messages.fetch(ENV.ADMIN_DASHBOARD_MESSAGE_ID);
           const payload = await buildAdminDashboardMessage(interaction.client);
@@ -133,24 +112,16 @@ export async function routeInteraction(interaction) {
 
       if (id.startsWith("staff_approve:")) return approveOrder(interaction);
       if (id.startsWith("staff_gen:")) return genCommands(interaction);
-
-      // SET PLATE (new)
       if (id.startsWith("staff_set_car_plate:")) return setPlate(interaction);
       if (id.startsWith("staff_set_boat_plate:")) return setPlate(interaction);
-
-      // SET PLATE (old fallback)
       if (id.startsWith("staff_set_plate:")) return setPlate(interaction);
-
       if (id.startsWith("staff_close:")) return closeOrder(interaction);
       if (id.startsWith("staff_cancel:")) return cancelOrder(interaction);
-
       if (id.startsWith("vehiclecard_useins:")) return useInsuranceFromCard(interaction);
-
       return;
     }
   } catch (err) {
     console.error("routeInteraction error:", err);
-    // try not to crash
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({ content: "❌ มีข้อผิดพลาด (ดู log)", flags: MessageFlags.Ephemeral }).catch(() => {});
     }

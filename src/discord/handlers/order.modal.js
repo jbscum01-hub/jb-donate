@@ -1,6 +1,6 @@
-// src/discord/handlers/order.modal.js
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags } from "discord.js";
-import { DONATE_PACKS, BOOSTS, VIP_PACKS } from "../../domain/catalog.js";
+import { BOOSTS, VIP_PACKS } from "../../domain/catalog.js";
+import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
 import { isSteamId17, safeSlugUsername } from "../../domain/validators.js";
 import { nextOrderNo } from "../../domain/orderNo.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
@@ -25,18 +25,23 @@ export async function createOrderFromModal(interaction) {
     }
 
     let amount = 0;
-    if (type === "DONATE") amount = DONATE_PACKS[code]?.price ?? 0;
-    if (type === "BOOST") amount = BOOSTS[code]?.price ?? 0;
-    if (type === "VIP") amount = VIP_PACKS[code]?.price ?? 0;
+    let packName = code;
+    let donatePack = null;
+
+    if (type === "DONATE") {
+      donatePack = await DonatePackRepo.getPackDetails(code);
+      amount = Number(donatePack?.price ?? 0);
+      packName = donatePack?.pack_name ?? code;
+    }
+    if (type === "BOOST") amount = Number(BOOSTS[code]?.price ?? 0);
+    if (type === "VIP") amount = Number(VIP_PACKS[code]?.price ?? 0);
 
     if (!amount) return safeReply(interaction, { content: "❌ ไม่พบแพ็กที่เลือก", ephemeral: true });
 
     const orderNo = await nextOrderNo("JB");
-
     const slug = safeSlugUsername(interaction.user.username);
     const seq = orderNo.split("-").pop();
     const channelName = `donate-${slug}-${seq}`;
-
     const ticket = await createTicketChannel(interaction.guild, interaction.user, channelName);
 
     await OrdersRepo.insert({
@@ -45,6 +50,7 @@ export async function createOrderFromModal(interaction) {
       user_id: interaction.user.id,
       user_tag: interaction.user.tag,
       type,
+      pack_id: donatePack?.pack_id ?? null,
       pack_code: code,
       amount,
       ign,
@@ -53,40 +59,42 @@ export async function createOrderFromModal(interaction) {
       ticket_channel_id: ticket.id,
     });
 
-    // Queue message
     const queueCh = await interaction.client.channels.fetch(IDS.QUEUE_CHANNEL_ID);
     const qmsg = await queueCh.send(
       `🧾 New Order **${orderNo}** | <@${interaction.user.id}> | ${type}:${code} | ${amount}฿ | Ticket: <#${ticket.id}>`
     );
     await OrdersRepo.setQueueMessageId(orderNo, qmsg.id);
 
-    // Ticket intro
     const intro = new EmbedBuilder()
       .setTitle(`🎫 Ticket: ${orderNo}`)
       .setDescription("กรุณาแนบสลิปในห้องนี้ และเลือก model (ถ้ามี) จากเมนูด้านล่าง")
       .addFields(
         { name: "ผู้ซื้อ", value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: false },
-        { name: "แพ็ก", value: `${type}:${code} (${amount}฿)`, inline: true },
+        { name: "แพ็ก", value: `${type}:${packName} (${amount}฿)`, inline: true },
         { name: "IGN", value: ign, inline: true },
         { name: "SteamID", value: steam, inline: true },
         { name: "Note", value: note ? note : "-", inline: false },
         { name: "Status", value: "PENDING", inline: true },
       );
 
-    const components = [];
-
-    // model select (player chooses model)
     if (type === "DONATE") {
-      const p = DONATE_PACKS[code];
+      const bullets = donatePack?.benefits?.length
+        ? donatePack.benefits.map((x) => `• ${x}`).join("\n")
+        : (donatePack?.displayItems ?? []).map((x) => `• ${x}`).join("\n");
+      if (bullets) intro.addFields({ name: "สิทธิ์ที่ได้รับ", value: bullets.slice(0, 1024), inline: false });
+    }
+
+    const components = [];
+    if (type === "DONATE") {
       const options = [];
-      for (const v of (p?.vehicleChoices ?? [])) options.push({ label: `CAR: ${v}`, value: `CAR:${v}` });
-      for (const b of (p?.boatChoices ?? [])) options.push({ label: `BOAT: ${b}`, value: `BOAT:${b}` });
+      for (const v of donatePack?.vehicleChoices ?? []) options.push({ label: `CAR: ${v}`, value: `CAR:${v}` });
+      for (const b of donatePack?.boatChoices ?? []) options.push({ label: `BOAT: ${b}`, value: `BOAT:${b}` });
 
       if (options.length) {
         const select = new StringSelectMenuBuilder()
           .setCustomId(`ticket_model_select:${orderNo}`)
           .setPlaceholder("เลือก model รถ/เรือ (ถ้ามี)")
-          .addOptions(options);
+          .addOptions(options.slice(0, 25));
         components.push(new ActionRowBuilder().addComponents(select));
       }
     }
@@ -101,7 +109,7 @@ export async function createOrderFromModal(interaction) {
 
     return safeReply(interaction, {
       content: `✅ สร้าง Ticket แล้ว: <#${ticket.id}> (Order: ${orderNo})`,
-      ephemeral: true
+      ephemeral: true,
     });
   } catch (err) {
     console.error("createOrderFromModal error:", err);

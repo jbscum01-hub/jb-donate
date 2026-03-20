@@ -3,10 +3,11 @@ import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { AuditRepo } from "../../db/repo/audit.repo.js";
 import { IDS } from "../../config/constants.js";
-import { DONATE_PACKS, BOOSTS, VIP_PACKS, VEHICLE_COMMANDS } from "../../domain/catalog.js";
+import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
+import { BOOSTS, VIP_PACKS } from "../../domain/catalog.js";
 import { safeReply } from "../utils/messages.js";
 
-function buildTemplate(order) {
+async function buildTemplate(order) {
   const lines = [];
   lines.push("====== SCUM ORDER TEMPLATE ======");
   lines.push(`Order: ${order.order_no}`);
@@ -19,45 +20,47 @@ function buildTemplate(order) {
   lines.push("");
 
   if (order.type === "DONATE") {
-    const p = DONATE_PACKS[order.pack_code];
+    const p = await DonatePackRepo.getPackDetails(order.pack_code);
     lines.push("ITEMS:");
-    for (const it of (p.displayItems ?? [])) lines.push(`- ${it}`);
+    for (const it of (p?.displayItems ?? [])) lines.push(`- ${it}`);
     lines.push("");
 
     lines.push("SPAWN COMMANDS:");
-    for (const cmd of (p.spawnItems ?? [])) lines.push(cmd);
+    for (const cmd of (p?.spawnItems ?? [])) lines.push(cmd);
     lines.push("");
 
     if (order.selected_vehicle) {
+      const selected = p?.vehicleChoiceMap?.[order.selected_vehicle];
       lines.push("CAR:");
       lines.push(`Model: ${order.selected_vehicle}`);
-      lines.push(`Command: ${VEHICLE_COMMANDS[order.selected_vehicle] ?? "-"}`);
+      lines.push(`Command: ${selected?.spawn_command_template ?? "-"}`);
       lines.push("");
     }
     if (order.selected_boat) {
+      const selected = p?.boatChoiceMap?.[order.selected_boat];
       lines.push("BOAT:");
       lines.push(`Model: ${order.selected_boat}`);
-      lines.push(`Command: ${VEHICLE_COMMANDS[order.selected_boat] ?? "-"}`);
+      lines.push(`Command: ${selected?.spawn_command_template ?? "-"}`);
       lines.push("");
     }
 
-    if (p.carInsurance) lines.push(`INSURANCE CAR: ${p.carInsurance.total} time(s) / ${p.carInsurance.days} day(s)`);
-    if (p.boatInsurance) lines.push(`INSURANCE BOAT: ${p.boatInsurance.total} time(s) / ${p.boatInsurance.days} day(s)`);
+    if (p?.carInsurance) lines.push(`INSURANCE CAR: ${p.carInsurance.total} time(s) / ${p.carInsurance.days} day(s)`);
+    if (p?.boatInsurance) lines.push(`INSURANCE BOAT: ${p.boatInsurance.total} time(s) / ${p.boatInsurance.days} day(s)`);
   }
 
   if (order.type === "BOOST") {
     const b = BOOSTS[order.pack_code];
     lines.push("BOOST EFFECTS:");
-    for (const e of b.effects) lines.push(`- ${e}`);
+    for (const e of b?.effects ?? []) lines.push(`- ${e}`);
   }
 
   if (order.type === "VIP") {
     const v = VIP_PACKS[order.pack_code];
     lines.push("VIP WEEKLY ITEMS:");
-    for (const it of (v.displayItems ?? [])) lines.push(`- ${it}`);
+    for (const it of (v?.displayItems ?? [])) lines.push(`- ${it}`);
     lines.push("");
     lines.push("VIP WEEKLY SPAWN COMMANDS:");
-    for (const cmd of (v.spawnItems ?? [])) lines.push(cmd);
+    for (const cmd of (v?.spawnItems ?? [])) lines.push(cmd);
   }
 
   lines.push("===============================");
@@ -81,7 +84,7 @@ export async function genTemplate(interaction) {
   }
 
   const logCh = await interaction.client.channels.fetch(IDS.LOG_CHANNEL_ID);
-  await logCh.send(buildTemplate(order));
+  await logCh.send(await buildTemplate(order));
 
   await AuditRepo.add({
     guild_id: interaction.guildId,
@@ -95,7 +98,6 @@ export async function genTemplate(interaction) {
   return safeReply(interaction, { content: `✅ GEN sent to log for ${orderNo}`, ephemeral: true });
 }
 
-// Backward-compat export (router imports genCommands)
 export async function genCommands(interaction) {
   return genTemplate(interaction);
 }

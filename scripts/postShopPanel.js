@@ -7,7 +7,7 @@ const client = createClient();
 
 client.once("ready", async () => {
   const ch = await client.channels.fetch(IDS.SHOP_CHANNEL_ID);
-  await ch.send(buildShopPanel());
+  await ch.send(await buildShopPanel());
   console.log("✅ Shop panel posted");
   process.exit(0);
 });

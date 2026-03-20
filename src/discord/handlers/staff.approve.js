@@ -1,17 +1,17 @@
-// src/discord/handlers/staff.approve.js
 import { EmbedBuilder, MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VipRepo } from "../../db/repo/vip.repo.js";
 import { AuditRepo } from "../../db/repo/audit.repo.js";
-import { DONATE_PACKS, VIP_PACKS } from "../../domain/catalog.js";
+import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
+import { VIP_PACKS } from "../../domain/catalog.js";
 import { safeReply } from "../utils/messages.js";
 import { ENV } from "../../config/env.js";
 import { IDS } from "../../config/constants.js";
 
-function missingSelections(order) {
+async function missingSelections(order) {
   if (order.type !== "DONATE") return [];
-  const p = DONATE_PACKS[order.pack_code];
+  const p = await DonatePackRepo.getPackDetails(order.pack_code);
   const needCar = (p?.vehicleChoices?.length ?? 0) > 0;
   const needBoat = (p?.boatChoices?.length ?? 0) > 0;
 
@@ -37,8 +37,7 @@ export async function approveOrder(interaction) {
     return safeReply(interaction, { content: `ℹ️ สถานะปัจจุบัน: ${order.status}`, ephemeral: true });
   }
 
-  // ✅ enforce model selection completeness for packs that have choices
-  const missing = missingSelections(order);
+  const missing = await missingSelections(order);
   if (missing.length) {
     const msg = [
       "❌ ยังเลือก Model ไม่ครบ จึงยัง APPROVE ไม่ได้",
@@ -50,7 +49,6 @@ export async function approveOrder(interaction) {
 
   const updated = await OrdersRepo.setStatus(orderNo, "APPROVED", interaction.user.id);
 
-  // ✅ VIP: activate/extend subscription + grant role immediately
   if (order.type === "VIP") {
     try {
       const vip = VIP_PACKS[order.pack_code];
@@ -64,8 +62,6 @@ export async function approveOrder(interaction) {
       }
 
       const daysToAdd = Number(vip.days ?? 30);
-
-      // upsert VIP subscription in DB
       const sub = await VipRepo.activateOrExtend({
         guildId: interaction.guildId,
         userId: order.user_id,
@@ -74,38 +70,35 @@ export async function approveOrder(interaction) {
         daysToAdd,
       });
 
-      // grant role on Discord
       const member = await interaction.guild.members.fetch(order.user_id).catch(() => null);
       if (member) await member.roles.add(roleId).catch(() => {});
 
-      // log
       const ch = await interaction.client.channels.fetch(IDS.VIP_LOG_CHANNEL_ID).catch(() => null);
       if (ch) {
-const pack = VIP_PACKS[order.pack_code];
-const items = (pack?.displayItems ?? []).map(x => `• ${x}`).join("\n") || "-";
-const cmds = (pack?.spawnItems ?? []).join("\n") || "-";
+        const pack = VIP_PACKS[order.pack_code];
+        const items = (pack?.displayItems ?? []).map((x) => `• ${x}`).join("\n") || "-";
+        const cmds = (pack?.spawnItems ?? []).join("\n") || "-";
 
-const embed = new EmbedBuilder()
-  .setTitle("👑 VIP Log")
-  .setDescription("บันทึกการเปิดใช้งาน/ต่ออายุ VIP")
-  .addFields(
-    { name: "👤 ผู้เล่น", value: `<@${order.user_id}>`, inline: true },
-    { name: "🎟️ แพ็ก", value: `${order.pack_code} (${order.amount}฿)`, inline: true },
-    { name: "⏱️ ต่ออายุ", value: `+${daysToAdd} วัน`, inline: true },
-    { name: "📅 หมดอายุ", value: String(sub?.expire_at ?? "?"), inline: false },
-    { name: "📦 รายการ (อ่านง่าย)", value: items, inline: false },
-    { name: "🧾 คำสั่งเสก", value: `\`\`\`\n${cmds}\n\`\`\``, inline: false },
-  )
-  .setFooter({ text: `Order: ${order.order_no} | Approved by ${interaction.user.tag}` });
+        const embed = new EmbedBuilder()
+          .setTitle("👑 VIP Log")
+          .setDescription("บันทึกการเปิดใช้งาน/ต่ออายุ VIP")
+          .addFields(
+            { name: "👤 ผู้เล่น", value: `<@${order.user_id}>`, inline: true },
+            { name: "🎟️ แพ็ก", value: `${order.pack_code} (${order.amount}฿)`, inline: true },
+            { name: "⏱️ ต่ออายุ", value: `+${daysToAdd} วัน`, inline: true },
+            { name: "📅 หมดอายุ", value: String(sub?.expire_at ?? "?"), inline: false },
+            { name: "📦 รายการ (อ่านง่าย)", value: items, inline: false },
+            { name: "🧾 คำสั่งเสก", value: `\`\`\`\n${cmds}\n\`\`\``, inline: false },
+          )
+          .setFooter({ text: `Order: ${order.order_no} | Approved by ${interaction.user.tag}` });
 
-await ch.send({ embeds: [embed] });
+        await ch.send({ embeds: [embed] });
       }
     } catch (e) {
       console.error("VIP activate error:", e);
       return safeReply(interaction, { content: `❌ เปิดใช้งาน VIP ไม่สำเร็จ: ${e?.message || e}`, ephemeral: true });
     }
   }
-
 
   await AuditRepo.add({
     guild_id: interaction.guildId,

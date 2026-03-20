@@ -1,17 +1,12 @@
-// src/discord/handlers/shop.select.js
 import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, MessageFlags } from "discord.js";
 
-/**
- * Shop select -> open order modal (NO defer/reply before showModal)
- * value format: TYPE:CODE e.g. DONATE:BRONZE
- */
 export async function openOrderModal(interaction) {
   try {
     if (!interaction.isStringSelectMenu()) return;
     if (interaction.customId !== "shop_select") return;
 
     const raw = interaction.values?.[0];
-    if (!raw || !raw.includes(":")) {
+    if (!raw || raw === "DISABLED:NO_PACKS" || !raw.includes(":")) {
       return interaction.reply({ content: "❌ ไม่พบแพ็กที่เลือก", flags: MessageFlags.Ephemeral }).catch(() => {});
     }
 
@@ -47,7 +42,6 @@ export async function openOrderModal(interaction) {
     return interaction.showModal(modal);
   } catch (err) {
     console.error("openOrderModal error:", err);
-    // best effort fallback
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: "❌ เปิดฟอร์มไม่สำเร็จ ลองใหม่อีกครั้ง",

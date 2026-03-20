@@ -1,27 +1,19 @@
-// src/discord/handlers/staff.close.js
 import { MessageFlags } from "discord.js";
 import { isAdmin } from "../../domain/permissions.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VehiclesRepo } from "../../db/repo/vehicles.repo.js";
 import { InsuranceRepo } from "../../db/repo/insurance.repo.js";
 import { AuditRepo } from "../../db/repo/audit.repo.js";
-import { DONATE_PACKS } from "../../domain/catalog.js";
+import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
 import { IDS } from "../../config/constants.js";
 import { collectAllAttachments } from "../utils/attachments.js";
 import { safeReply } from "../utils/messages.js";
 import { buildVehicleCard } from "../panels/vehicleCard.js";
 import { VIP_PACKS } from "../../domain/catalog.js";
 
-
-function requiredPlatesForDonate(order) {
-  const p = DONATE_PACKS[order.pack_code];
-
-  const requireCar =
-    Boolean(order.selected_vehicle) || Boolean(p?.carInsurance);
-  const requireBoat =
-    Boolean(order.selected_boat) || Boolean(p?.boatInsurance);
-
-  return { requireCar, requireBoat, pack: p };
+async function getDonatePack(order) {
+  if (order.type !== "DONATE") return null;
+  return DonatePackRepo.getPackDetails(order.pack_code);
 }
 
 async function refreshVehicleCard(client, plate, kind) {
@@ -62,20 +54,15 @@ export async function closeOrder(interaction) {
     return safeReply(interaction, { content: "❌ ต้อง APPROVE ก่อนจึงจะ CLOSE ได้", ephemeral: true });
   }
 
-  // NOTE: Plate is no longer required to close an order.
-
-  // ===== Grant insurance at CLOSE (DONATE only) =====
   if (order.type === "DONATE") {
-    const { pack: p } = requiredPlatesForDonate(order);
+    const p = await getDonatePack(order);
 
-    // CAR insurance
-    // If plate is missing, skip granting (order can still be closed).
     if (p?.carInsurance && order.car_plate) {
       await InsuranceRepo.upsertInsurance({
         plate: order.car_plate,
         kind: "CAR",
-        add_total: p.carInsurance.total,   // ✅ accumulate
-        days: p.carInsurance.days,         // ✅ extend expiry
+        add_total: p.carInsurance.total,
+        days: p.carInsurance.days,
         order_no: orderNo,
         source: "DONATE_PACK",
       });
@@ -95,14 +82,12 @@ export async function closeOrder(interaction) {
       await refreshVehicleCard(interaction.client, order.car_plate, "CAR");
     }
 
-    // BOAT insurance
-    // If plate is missing, skip granting (order can still be closed).
     if (p?.boatInsurance && order.boat_plate) {
       await InsuranceRepo.upsertInsurance({
         plate: order.boat_plate,
         kind: "BOAT",
-        add_total: p.boatInsurance.total,  // ✅ accumulate
-        days: p.boatInsurance.days,        // ✅ extend expiry
+        add_total: p.boatInsurance.total,
+        days: p.boatInsurance.days,
         order_no: orderNo,
         source: "DONATE_PACK",
       });
@@ -123,13 +108,7 @@ export async function closeOrder(interaction) {
     }
   }
 
-    // ===== Grant insurance at CLOSE (VIP) =====
   if (order.type === "VIP") {
-    // Plate is optional. If not provided, we'll skip granting insurance.
-
-    // ตั้งค่าประกัน VIP (ปรับเลข days ได้ตามต้องการ)
-    // - BASIC/PRO: เพิ่มตามแพ็ก
-    // - ELITE: unlimited -> +9999
     const vip = VIP_PACKS[order.pack_code];
     if (!vip) {
       return safeReply(interaction, { content: "❌ ไม่พบ VIP PACK", ephemeral: true });
@@ -137,7 +116,7 @@ export async function closeOrder(interaction) {
 
     const VIP_INS = {
       BASIC: { add_total: 5, days: 999 },
-      PRO:   { add_total: 10, days: 999 },
+      PRO: { add_total: 10, days: 999 },
       ELITE: { add_total: 999, days: 999 },
     };
 
@@ -150,8 +129,8 @@ export async function closeOrder(interaction) {
       await InsuranceRepo.upsertInsurance({
         plate: order.car_plate,
         kind: "CAR",
-        add_total: cfg.add_total,  // ✅ สะสมเพิ่ม
-        days: cfg.days,            // ✅ มี expire_at ทุกแพ็ก
+        add_total: cfg.add_total,
+        days: cfg.days,
         order_no: orderNo,
         source: "VIP_PACK",
       });
@@ -172,10 +151,8 @@ export async function closeOrder(interaction) {
     }
   }
 
-  // ===== Archive attachments (all) =====
   const ticketCh = interaction.channel;
   const attachments = await collectAllAttachments(ticketCh);
-
   const archiveCh = await interaction.client.channels.fetch(IDS.SLIP_ARCHIVE_CHANNEL_ID);
 
   const summary = [
@@ -191,10 +168,7 @@ export async function closeOrder(interaction) {
     `Time: <t:${Math.floor(Date.now() / 1000)}:f>`,
   ].join("\n");
 
-  // ===== Archive attachments (re-upload so links never expire) =====
-  const files = attachments.map(a => ({ attachment: a.url, name: a.name }));
-
-  // Discord limits files per message; send in chunks to keep previews working.
+  const files = attachments.map((a) => ({ attachment: a.url, name: a.name }));
   const chunkSize = 10;
   if (!files.length) {
     await archiveCh.send(summary + "\n\n**Attachments:**\n- (no attachments)");
@@ -209,7 +183,6 @@ export async function closeOrder(interaction) {
     }
   }
 
-  // ===== Update order status =====
   await OrdersRepo.setStatus(orderNo, "SUCCESS", interaction.user.id);
 
   await AuditRepo.add({
@@ -221,17 +194,15 @@ export async function closeOrder(interaction) {
     meta: {
       car_plate: order.car_plate ?? null,
       boat_plate: order.boat_plate ?? null,
-      attachments: attachments.length
+      attachments: attachments.length,
     },
   });
 
-  // ===== DM user (best effort) =====
   try {
     const u = await interaction.client.users.fetch(order.user_id);
     await u.send(`✅ ออเดอร์ ${orderNo} สำเร็จแล้ว ขอบคุณสำหรับการสนับสนุน ❤️`);
   } catch {}
 
   await safeReply(interaction, { content: "✅ ปิดงานสำเร็จ กำลังลบห้อง…", ephemeral: true });
-
   await ticketCh.delete("Ticket closed SUCCESS").catch(() => {});
 }

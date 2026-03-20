@@ -4,9 +4,17 @@ import { SQL } from "../queries.js";
 export const OrdersRepo = {
   async insert(order) {
     const { rows } = await pool.query(SQL.insertOrder, [
-      order.order_no, order.guild_id, order.user_id, order.user_tag,
-      order.type, order.pack_code, order.amount,
-      order.ign, order.steam_id, order.note ?? null,
+      order.order_no,
+      order.guild_id,
+      order.user_id,
+      order.user_tag,
+      order.type,
+      order.pack_id ?? null,
+      order.pack_code,
+      order.amount,
+      order.ign,
+      order.steam_id,
+      order.note ?? null,
       order.ticket_channel_id ?? null,
     ]);
     return rows[0];
@@ -21,7 +29,7 @@ export const OrdersRepo = {
     const { rows } = await pool.query(SQL.setOrderStatus, [orderNo, status, staffId]);
     return rows[0] ?? null;
   },
-  
+
   async setCarPlate(orderNo, plate, staffId) {
     const { rows } = await pool.query(SQL.setOrderCarPlate, [orderNo, plate, staffId]);
     return rows[0] ?? null;
@@ -47,17 +55,17 @@ export const OrdersRepo = {
   },
 
   async getDashboardStats(guildId) {
-  const { rows } = await pool.query(SQL.getOrdersDashboardStats, [guildId]);
-  return rows[0] ?? {
-    total_amount: 0,
-    total_orders: 0,
-    today_amount: 0,
-    today_orders: 0,
-    pending_orders: 0,
-    approved_orders: 0,
-    delivered_orders: 0,
-    closed_orders: 0,
-    canceled_orders: 0,
+    const { rows } = await pool.query(SQL.getOrdersDashboardStats, [guildId]);
+    return rows[0] ?? {
+      total_amount: 0,
+      total_orders: 0,
+      today_amount: 0,
+      today_orders: 0,
+      pending_orders: 0,
+      approved_orders: 0,
+      delivered_orders: 0,
+      closed_orders: 0,
+      canceled_orders: 0,
     };
   },
 
@@ -89,5 +97,4 @@ export const OrdersRepo = {
     const { rows } = await pool.query(SQL.getOrdersTopPacks7d, [guildId, Number(limit) || 5]);
     return rows;
   },
-
 };
