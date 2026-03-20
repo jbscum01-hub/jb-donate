@@ -67,7 +67,7 @@ export async function createOrderFromModal(interaction) {
 
     const intro = new EmbedBuilder()
       .setTitle(`🎫 Ticket: ${orderNo}`)
-      .setDescription("กรุณาแนบสลิปในห้องนี้ และเลือกแพ็ก/รถ/เรือที่ต้องการให้ครบ หากชื่อในเกมไม่ตรงจะต้องเปิดเคสใหม่")
+      .setDescription("กรุณาแนบสลิปในห้องนี้ และถ้าแพ็กมีรถ/เรือ ให้เลือกจากเมนูด้านล่าง")
       .addFields(
         { name: "ผู้ซื้อ", value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: false },
         { name: "แพ็ก", value: `${type}:${packName} (${amount}฿)`, inline: true },
@@ -75,12 +75,19 @@ export async function createOrderFromModal(interaction) {
         { name: "SteamID", value: steam, inline: true },
         { name: "Note", value: note ? note : "-", inline: false },
         { name: "Status", value: "PENDING", inline: true },
+        {
+          name: "📌 สำคัญ",
+          value: "ใส่ชื่อให้ตรงกับตัวละครทุกกรณี ถ้าทีมงานตรวจแล้วชื่อไม่ตรง จะให้เปิดเคสใหม่",
+          inline: false,
+        }
       );
 
     if (type === "DONATE") {
       const bullets = donatePack?.benefits?.length
-        ? donatePack.benefits.map((x) => `• ${x}`).join("\n")
-        : (donatePack?.displayItems ?? []).map((x) => `• ${x}`).join("\n");
+        ? donatePack.benefits.map((x) => `• ${x}`).join("
+")
+        : (donatePack?.displayItems ?? []).map((x) => `• ${x}`).join("
+");
       if (bullets) intro.addFields({ name: "สิทธิ์ที่ได้รับ", value: bullets.slice(0, 1024), inline: false });
     }
 
