@@ -32,6 +32,19 @@ export async function createOrderFromModal(interaction) {
       });
     }
 
+    const existingOpen = await OrdersRepo.findOpenByUser(interaction.guildId, interaction.user.id);
+    if (existingOpen) {
+      const ref = existingOpen.ticket_channel_id
+        ? `<#${existingOpen.ticket_channel_id}>`
+        : `Order ${existingOpen.order_no}`;
+
+      return safeReply(interaction, {
+        content: `⚠️ คุณมีออเดอร์ที่ยังเปิดอยู่แล้ว: ${ref}
+กรุณาดำเนินรายการเดิมให้เสร็จก่อน`,
+        ephemeral: true,
+      });
+    }
+
     let amount = 0;
     let packName = code;
     let donatePack = null;
@@ -57,12 +70,13 @@ export async function createOrderFromModal(interaction) {
     const seq = orderNo.split("-").pop();
     const channelName = `donate-${slug}-${seq}`;
     const ticket = await createTicketChannel(interaction.guild, interaction.user, channelName);
+    const userTag = interaction.user.tag ?? interaction.user.username;
 
     await OrdersRepo.insert({
       order_no: orderNo,
       guild_id: interaction.guildId,
       user_id: interaction.user.id,
-      user_tag: interaction.user.tag,
+      user_tag: userTag,
       type,
       pack_id: donatePack?.pack_id ?? null,
       pack_code: code,
@@ -79,13 +93,19 @@ export async function createOrderFromModal(interaction) {
     );
     await OrdersRepo.setQueueMessageId(orderNo, qmsg.id);
 
+    const embedColor =
+      type === "DONATE" && donatePack?.embed_color != null
+        ? Number(donatePack.embed_color)
+        : 0x2b2d31;
+
     const intro = new EmbedBuilder()
+      .setColor(embedColor)
       .setTitle(`🎫 Ticket: ${orderNo}`)
       .setDescription("กรุณาแนบสลิปในห้องนี้ และถ้าแพ็กมีรถ/เรือ ให้เลือกจากเมนูด้านล่าง")
       .addFields(
         {
           name: "ผู้ซื้อ",
-          value: `<@${interaction.user.id}> (${interaction.user.tag})`,
+          value: `<@${interaction.user.id}> (${userTag})`,
           inline: false,
         },
         {
@@ -105,7 +125,7 @@ export async function createOrderFromModal(interaction) {
         },
         {
           name: "Note",
-          value: note ? note : "-",
+          value: note || "-",
           inline: false,
         },
         {
@@ -119,6 +139,10 @@ export async function createOrderFromModal(interaction) {
           inline: false,
         }
       );
+
+    if (type === "DONATE" && donatePack?.image_url) {
+      intro.setImage(donatePack.image_url);
+    }
 
     if (type === "DONATE") {
       const bullets = donatePack?.benefits?.length

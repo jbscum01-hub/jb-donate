@@ -21,6 +21,15 @@ export const SQL = {
     returning *
   `,
   getOrderByNo: `select * from tb_donate_orders where order_no=$1`,
+  findOpenOrderByUser: `
+    select *
+    from tb_donate_orders
+    where guild_id = $1
+      and user_id = $2
+      and status in ('PENDING', 'APPROVED')
+    order by created_at desc
+    limit 1
+  `,
   setOrderStatus: `
     update tb_donate_orders
     set status=$2, staff_last_action_by=$3, staff_last_action_at=now()
@@ -54,6 +63,12 @@ export const SQL = {
   setOrderQueueMsg: `
     update tb_donate_orders set queue_message_id=$2 where order_no=$1
   `,
+  getOpenQueueCount: `
+    select count(*)::bigint as queue_count
+    from tb_donate_orders
+    where guild_id = $1
+      and status in ('PENDING', 'APPROVED')
+  `,
 
   getOrdersDashboardStats: `
     with tz as (
@@ -80,9 +95,8 @@ export const SQL = {
       )::bigint as today_orders,
       count(case when o.status = 'PENDING' then 1 end)::bigint as pending_orders,
       count(case when o.status = 'APPROVED' then 1 end)::bigint as approved_orders,
-      count(case when o.status = 'DELIVERED' then 1 end)::bigint as delivered_orders,
-      count(case when o.status = 'CLOSED' then 1 end)::bigint as closed_orders,
-      count(case when o.status = 'CANCELED' then 1 end)::bigint as canceled_orders
+      count(case when o.status = 'SUCCESS' then 1 end)::bigint as success_orders,
+      count(case when o.status = 'CANCELLED' then 1 end)::bigint as cancelled_orders
     from tb_donate_orders o
     where o.guild_id = $1;
   `,
@@ -109,13 +123,10 @@ export const SQL = {
                  and b.status='APPROVED' then 1 end)::bigint as today_approved,
       count(case when b.created_th >= (select day_start_th from tz)
                  and b.created_th <  (select day_end_th from tz)
-                 and b.status='DELIVERED' then 1 end)::bigint as today_delivered,
+                 and b.status='SUCCESS' then 1 end)::bigint as today_success,
       count(case when b.created_th >= (select day_start_th from tz)
                  and b.created_th <  (select day_end_th from tz)
-                 and b.status='CLOSED' then 1 end)::bigint as today_closed,
-      count(case when b.created_th >= (select day_start_th from tz)
-                 and b.created_th <  (select day_end_th from tz)
-                 and b.status='CANCELED' then 1 end)::bigint as today_canceled,
+                 and b.status='CANCELLED' then 1 end)::bigint as today_cancelled,
       coalesce(sum(case when b.created_th >= (select day_start_th from tz)
                          and b.created_th <  (select day_end_th from tz)
                          and b.type='DONATE' then b.amount else 0 end),0)::bigint as today_donate_amount,

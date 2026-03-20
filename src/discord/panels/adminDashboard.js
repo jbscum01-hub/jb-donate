@@ -33,12 +33,11 @@ export async function buildAdminDashboardSnapshot(client) {
 
     pendingOrders: 0,
     approvedOrders: 0,
-    deliveredOrders: 0,
-    closedOrders: 0,
-    canceledOrders: 0,
+    successOrders: 0,
+    cancelledOrders: 0,
 
     queueCount: 0,
-    todayStatus: { pending: 0, approved: 0, delivered: 0, closed: 0, canceled: 0 },
+    todayStatus: { pending: 0, approved: 0, success: 0, cancelled: 0 },
     todayByType: {
       donateAmount: 0,
       donateOrders: 0,
@@ -71,17 +70,15 @@ export async function buildAdminDashboardSnapshot(client) {
 
       data.pendingOrders = n(s.pending_orders);
       data.approvedOrders = n(s.approved_orders);
-      data.deliveredOrders = n(s.delivered_orders);
-      data.closedOrders = n(s.closed_orders);
-      data.canceledOrders = n(s.canceled_orders);
+      data.successOrders = n(s.success_orders);
+      data.cancelledOrders = n(s.cancelled_orders);
 
       const ex = await OrdersRepo.getDashboardExtra(ENV.GUILD_ID);
       data.todayStatus = {
         pending: n(ex.today_pending),
         approved: n(ex.today_approved),
-        delivered: n(ex.today_delivered),
-        closed: n(ex.today_closed),
-        canceled: n(ex.today_canceled),
+        success: n(ex.today_success),
+        cancelled: n(ex.today_cancelled),
       };
       data.todayByType = {
         donateAmount: n(ex.today_donate_amount),
@@ -101,22 +98,14 @@ export async function buildAdminDashboardSnapshot(client) {
       data.vipExpiringSoon = await VipRepo.listExpiringSoon(ENV.GUILD_ID, 24, 5);
 
       data.insurance = await InsuranceRepo.getDashboardStats(5);
+      data.queueCount = await OrdersRepo.getOpenQueueCount(ENV.GUILD_ID);
     }
   } catch (e) {
     data.notes.push(`⚠️ OrdersRepo stats error: ${e?.message || String(e)}`);
   }
 
-  // 2) Queue / ticket rough count (best-effort)
-  try {
-    if (ENV.QUEUE_CHANNEL_ID) {
-      const qch = await client.channels.fetch(ENV.QUEUE_CHANNEL_ID).catch(() => null);
-      if (qch?.threads?.cache) {
-        data.queueCount = qch.threads.cache.size;
-      }
-    }
-  } catch (e) {
-    // ไม่ critical
-  }
+  // 2) Keep client referenced so signature stays the same
+  void client;
 
   return data;
 }
@@ -124,14 +113,13 @@ export async function buildAdminDashboardSnapshot(client) {
 export async function buildAdminDashboardMessage(client) {
   const s = await buildAdminDashboardSnapshot(client);
 
-  const topPacksTxt = (s.topPacks7d?.length
+  const topPacksTxt = s.topPacks7d?.length
     ? s.topPacks7d
-        .map((r, i) => `${i + 1}. **${r.pack_code || "(unknown)"}** — ${fmtMoney(r.amount)} (${fmtMoney(r.orders)} orders)`) 
+        .map((r, i) => `${i + 1}. **${r.pack_code || "(unknown)"}** — ${fmtMoney(r.amount)} (${fmtMoney(r.orders)} orders)`)
         .join("\n")
-    : "-"
-  );
+    : "-";
 
-  const recentTxt = (s.recentOrders?.length
+  const recentTxt = s.recentOrders?.length
     ? s.recentOrders
         .map((r) => {
           const when = r.created_th ? new Date(r.created_th).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "-";
@@ -139,28 +127,25 @@ export async function buildAdminDashboardMessage(client) {
         })
         .slice(0, 5)
         .join("\n")
-    : "-"
-  );
+    : "-";
 
-  const vipSoonTxt = (s.vipExpiringSoon?.length
+  const vipSoonTxt = s.vipExpiringSoon?.length
     ? s.vipExpiringSoon
         .map((v) => {
           const when = v.expire_at ? new Date(v.expire_at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "-";
           return `<@${v.user_id}> • **${v.vip_code}** • หมดอายุ: ${when}`;
         })
         .join("\n")
-    : "-"
-  );
+    : "-";
 
-  const insSoonTxt = (s.insurance?.soon?.length
+  const insSoonTxt = s.insurance?.soon?.length
     ? s.insurance.soon
         .map((p) => {
           const when = p.expire_at ? new Date(p.expire_at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "-";
           return `**${p.plate}** (${p.kind}) • ใช้ไป ${fmtMoney(p.used)}/${fmtMoney(p.total)} • หมดอายุ: ${when}`;
         })
         .join("\n")
-    : "-"
-  );
+    : "-";
 
   const embed = new EmbedBuilder()
     .setColor(0x2b2d31)
@@ -169,33 +154,38 @@ export async function buildAdminDashboardMessage(client) {
     .addFields(
       {
         name: "📊 Donate (รวม)",
-        value: `ยอดรวม: **${fmtMoney(s.totalAmount)}**\nออเดอร์: **${fmtMoney(s.totalOrders)}**`,
+        value: `ยอดรวม: **${fmtMoney(s.totalAmount)}**
+ออเดอร์: **${fmtMoney(s.totalOrders)}**`,
         inline: true,
       },
       {
         name: "📅 วันนี้ (TH)",
-        value: `ยอดวันนี้: **${fmtMoney(s.todayAmount)}**\nออเดอร์วันนี้: **${fmtMoney(s.todayOrders)}**`,
+        value: `ยอดวันนี้: **${fmtMoney(s.todayAmount)}**
+ออเดอร์วันนี้: **${fmtMoney(s.todayOrders)}**`,
         inline: true,
       },
       {
         name: "📦 Orders Status",
         value:
-          `PENDING: **${fmtMoney(s.pendingOrders)}**\n` +
-          `APPROVED: **${fmtMoney(s.approvedOrders)}**\n` +
-          `DELIVERED: **${fmtMoney(s.deliveredOrders)}**\n` +
-          `CLOSED: **${fmtMoney(s.closedOrders)}**\n` +
-          `CANCELED: **${fmtMoney(s.canceledOrders)}**`,
+          `PENDING: **${fmtMoney(s.pendingOrders)}**
+` +
+          `APPROVED: **${fmtMoney(s.approvedOrders)}**
+` +
+          `SUCCESS: **${fmtMoney(s.successOrders)}**
+` +
+          `CANCELLED: **${fmtMoney(s.cancelledOrders)}**`,
         inline: true,
       },
       {
         name: "🎟️ Queue / Ticket",
-        value: `เธรดในห้องคิว: **${fmtMoney(s.queueCount)}**`,
+        value: `ออเดอร์เปิดอยู่: **${fmtMoney(s.queueCount)}**`,
         inline: true,
       },
       {
         name: "🧩 System",
         value:
-          `ENV: **${process.env.RAILWAY_ENVIRONMENT_NAME || "local"}**\n` +
+          `ENV: **${process.env.RAILWAY_ENVIRONMENT_NAME || "local"}**
+` +
           `Updated: **${nowTH()}**`,
         inline: true,
       }
@@ -204,45 +194,58 @@ export async function buildAdminDashboardMessage(client) {
       {
         name: "🧾 Today Breakdown",
         value:
-          `DONATE: **${fmtMoney(s.todayByType.donateAmount)}** (${fmtMoney(s.todayByType.donateOrders)})\n` +
-          `VIP: **${fmtMoney(s.todayByType.vipAmount)}** (${fmtMoney(s.todayByType.vipOrders)})\n` +
+          `DONATE: **${fmtMoney(s.todayByType.donateAmount)}** (${fmtMoney(s.todayByType.donateOrders)})
+` +
+          `VIP: **${fmtMoney(s.todayByType.vipAmount)}** (${fmtMoney(s.todayByType.vipOrders)})
+` +
           `BOOST: **${fmtMoney(s.todayByType.boostAmount)}** (${fmtMoney(s.todayByType.boostOrders)})`,
         inline: true,
       },
       {
         name: "📦 Today Status",
         value:
-          `PENDING: **${fmtMoney(s.todayStatus.pending)}**\n` +
-          `APPROVED: **${fmtMoney(s.todayStatus.approved)}**\n` +
-          `DELIVERED: **${fmtMoney(s.todayStatus.delivered)}**\n` +
-          `CLOSED: **${fmtMoney(s.todayStatus.closed)}**\n` +
-          `CANCELED: **${fmtMoney(s.todayStatus.canceled)}**`,
+          `PENDING: **${fmtMoney(s.todayStatus.pending)}**
+` +
+          `APPROVED: **${fmtMoney(s.todayStatus.approved)}**
+` +
+          `SUCCESS: **${fmtMoney(s.todayStatus.success)}**
+` +
+          `CANCELLED: **${fmtMoney(s.todayStatus.cancelled)}**`,
         inline: true,
       },
       {
         name: "⏳ Pending Aging",
         value:
-          `ค้างเกิน 24 ชม.: **${fmtMoney(s.pendingOver24h)}**\n` +
+          `ค้างเกิน 24 ชม.: **${fmtMoney(s.pendingOver24h)}**
+` +
           `ค้างเก่าสุด (TH): **${s.oldestPendingTH ? new Date(s.oldestPendingTH).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "-"}**`,
         inline: true,
       },
       {
         name: "👑 VIP",
         value:
-          `Active: **${fmtMoney(s.vip.active)}**\n` +
-          `Due grants: **${fmtMoney(s.vip.due_grants)}**\n` +
-          `Expiring 24h: **${fmtMoney(s.vip.expiring_24h)}**\n` +
-          `Expiring 3d: **${fmtMoney(s.vip.expiring_3d)}**\n` +
+          `Active: **${fmtMoney(s.vip.active)}**
+` +
+          `Due grants: **${fmtMoney(s.vip.due_grants)}**
+` +
+          `Expiring 24h: **${fmtMoney(s.vip.expiring_24h)}**
+` +
+          `Expiring 3d: **${fmtMoney(s.vip.expiring_3d)}**
+` +
           `Expired: **${fmtMoney(s.vip.expired)}**`,
         inline: true,
       },
       {
         name: "🚗 Insurance",
         value:
-          `Active: **${fmtMoney(s.insurance.active)}**\n` +
-          `Exhausted: **${fmtMoney(s.insurance.exhausted)}**\n` +
-          `Expiring 24h: **${fmtMoney(s.insurance.expiring_24h)}**\n` +
-          `Expiring 3d: **${fmtMoney(s.insurance.expiring_3d)}**\n` +
+          `Active: **${fmtMoney(s.insurance.active)}**
+` +
+          `Exhausted: **${fmtMoney(s.insurance.exhausted)}**
+` +
+          `Expiring 24h: **${fmtMoney(s.insurance.expiring_24h)}**
+` +
+          `Expiring 3d: **${fmtMoney(s.insurance.expiring_3d)}**
+` +
           `Expired: **${fmtMoney(s.insurance.expired)}**`,
         inline: true,
       },
@@ -253,17 +256,17 @@ export async function buildAdminDashboardMessage(client) {
       },
       {
         name: "🕘 Recent Orders",
-        value: recentTxt.length > 1024 ? recentTxt.slice(0, 1000) + "…" : recentTxt,
+        value: recentTxt.length > 1024 ? `${recentTxt.slice(0, 1000)}…` : recentTxt,
         inline: false,
       },
       {
         name: "⏰ VIP Expiring (24h)",
-        value: vipSoonTxt.length > 1024 ? vipSoonTxt.slice(0, 1000) + "…" : vipSoonTxt,
+        value: vipSoonTxt.length > 1024 ? `${vipSoonTxt.slice(0, 1000)}…` : vipSoonTxt,
         inline: false,
       },
       {
-        name: "🧯 Insurance Expiring (soon)",
-        value: insSoonTxt.length > 1024 ? insSoonTxt.slice(0, 1000) + "…" : insSoonTxt,
+        name: "🪪 Insurance Expiring Soon",
+        value: insSoonTxt.length > 1024 ? `${insSoonTxt.slice(0, 1000)}…` : insSoonTxt,
         inline: false,
       }
     );
@@ -271,57 +274,19 @@ export async function buildAdminDashboardMessage(client) {
   if (s.notes?.length) {
     embed.addFields({
       name: "⚠️ Notes",
-      value: s.notes.slice(0, 5).join("\n"),
+      value: s.notes.join("\n").slice(0, 1024),
       inline: false,
     });
   }
 
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("admin:refresh")
-      .setLabel("🔄 Refresh")
-      .setStyle(ButtonStyle.Primary),
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("admin_dashboard_refresh")
+        .setLabel("Refresh Dashboard")
+        .setStyle(ButtonStyle.Primary)
+    ),
+  ];
 
-    new ButtonBuilder()
-      .setCustomId("admin:vip_tick")
-      .setLabel("🟣 Run VIP Tick")
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId("admin:health")
-      .setLabel("🟢 Health Check")
-      .setStyle(ButtonStyle.Success)
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("admin:rebuild_panels")
-      .setLabel("🧱 Rebuild Panels")
-      .setStyle(ButtonStyle.Secondary),
-
-    new ButtonBuilder()
-      .setCustomId("admin:rebuild_shop")
-      .setLabel("🛒 Rebuild Shop Panel")
-      .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId("admin:show_env")
-      .setLabel("🔐 Show Config")
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  // Manual insurance (admin only)
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("admin:add_insurance:CAR")
-      .setLabel("➕ Add CAR Insurance")
-      .setStyle(ButtonStyle.Primary),
-
-    new ButtonBuilder()
-      .setCustomId("admin:add_insurance:BOAT")
-      .setLabel("➕ Add BOAT Insurance")
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  return { content: "", embeds: [embed], components: [row1, row2, row3] };
+  return { embeds: [embed], components: rows };
 }

@@ -25,6 +25,11 @@ export const OrdersRepo = {
     return rows[0] ?? null;
   },
 
+  async findOpenByUser(guildId, userId) {
+    const { rows } = await pool.query(SQL.findOpenOrderByUser, [guildId, userId]);
+    return rows[0] ?? null;
+  },
+
   async setStatus(orderNo, status, staffId) {
     const { rows } = await pool.query(SQL.setOrderStatus, [orderNo, status, staffId]);
     return rows[0] ?? null;
@@ -54,6 +59,11 @@ export const OrdersRepo = {
     await pool.query(SQL.setOrderQueueMsg, [orderNo, messageId]);
   },
 
+  async getOpenQueueCount(guildId) {
+    const { rows } = await pool.query(SQL.getOpenQueueCount, [guildId]);
+    return Number(rows[0]?.queue_count ?? 0);
+  },
+
   async getDashboardStats(guildId) {
     const { rows } = await pool.query(SQL.getOrdersDashboardStats, [guildId]);
     return rows[0] ?? {
@@ -63,9 +73,8 @@ export const OrdersRepo = {
       today_orders: 0,
       pending_orders: 0,
       approved_orders: 0,
-      delivered_orders: 0,
-      closed_orders: 0,
-      canceled_orders: 0,
+      success_orders: 0,
+      cancelled_orders: 0,
     };
   },
 
@@ -74,9 +83,8 @@ export const OrdersRepo = {
     return rows[0] ?? {
       today_pending: 0,
       today_approved: 0,
-      today_delivered: 0,
-      today_closed: 0,
-      today_canceled: 0,
+      today_success: 0,
+      today_cancelled: 0,
       today_donate_amount: 0,
       today_donate_orders: 0,
       today_vip_amount: 0,
