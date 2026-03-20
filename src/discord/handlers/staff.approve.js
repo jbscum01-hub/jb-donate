@@ -101,9 +101,9 @@ export async function approveOrder(interaction) {
   }
 
   await AuditRepo.add({
-    guild_id: interaction.guildId,
-    actor_id: interaction.user.id,
-    actor_tag: interaction.user.tag,
+    guildId: interaction.guildId,
+    actorId: interaction.user.id,
+    actorTag: interaction.user.tag,
     action: "ORDER_APPROVE",
     target: orderNo,
     meta: { from: order.status, to: updated.status },

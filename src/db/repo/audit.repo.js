@@ -1,4 +1,4 @@
-import db from "../queries.js";
+import { pool } from "../pool.js";
 
 export const AuditRepo = {
   async add({
@@ -24,7 +24,7 @@ export const AuditRepo = {
     `;
 
     const values = [
-      guildId,
+      guildId ?? null,
       actorId,
       actorTag,
       action,
@@ -32,7 +32,7 @@ export const AuditRepo = {
       meta ? JSON.stringify(meta) : null,
     ];
 
-    const result = await db.query(sql, values);
-    return result.rows[0];
+    const result = await pool.query(sql, values);
+    return result.rows[0] ?? null;
   },
 };

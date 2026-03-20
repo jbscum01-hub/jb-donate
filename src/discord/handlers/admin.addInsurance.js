@@ -190,7 +190,7 @@ export async function addManualInsuranceFromModal(interaction) {
     const ownerTag = ownerMember.user?.tag || `${ownerMember.user?.username ?? "unknown"}`;
 
     vehicle = await VehiclesRepo.upsert({
-      guild_id: interaction.guildId,
+      guildId: interaction.guildId,
       plate,
       kind,
       model,
@@ -202,9 +202,9 @@ export async function addManualInsuranceFromModal(interaction) {
 
     // best-effort audit
     await AuditRepo.add({
-      guild_id: interaction.guildId,
-      actor_id: interaction.user.id,
-      actor_tag: interaction.user.tag,
+      guildId: interaction.guildId,
+      actorId: interaction.user.id,
+      actorTag: interaction.user.tag,
       action: "VEHICLE_AUTO_REGISTER",
       target: plate,
       meta: { kind, model, owner_user_id: ownerUserId, owner_tag: ownerTag },
@@ -229,7 +229,7 @@ export async function addManualInsuranceFromModal(interaction) {
 
   const ownerTag = ownerMember.user?.tag || `${ownerMember.user?.username ?? "unknown"}`;
   const vehicleAfterOwner = await VehiclesRepo.upsert({
-    guild_id: interaction.guildId,
+    guildId: interaction.guildId,
     plate,
     kind,
     model,
@@ -250,7 +250,7 @@ export async function addManualInsuranceFromModal(interaction) {
   });
 
   await InsuranceRepo.log({
-    guild_id: interaction.guildId,
+    guildId: interaction.guildId,
     plate,
     kind,
     action: "GRANT",
@@ -264,9 +264,9 @@ export async function addManualInsuranceFromModal(interaction) {
   const refreshed = await refreshVehicleCard(interaction.client, plate, kind);
 
   await AuditRepo.add({
-    guild_id: interaction.guildId,
-    actor_id: interaction.user.id,
-    actor_tag: interaction.user.tag,
+    guildId: interaction.guildId,
+    actorId: interaction.user.id,
+    actorTag: interaction.user.tag,
     action: "INSURANCE_MANUAL_GRANT",
     target: plate,
     meta: { kind, model, add_total: total, days, vehicle_card_message_id: refreshed?.messageId ?? null },

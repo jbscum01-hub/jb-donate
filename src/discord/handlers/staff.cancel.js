@@ -51,9 +51,9 @@ export async function cancelOrder(interaction) {
   await OrdersRepo.setStatus(orderNo, "CANCELLED", interaction.user.id);
 
   await AuditRepo.add({
-    guild_id: interaction.guildId,
-    actor_id: interaction.user.id,
-    actor_tag: interaction.user.tag,
+    guildId: interaction.guildId,
+    actorId: interaction.user.id,
+    actorTag: interaction.user.tag,
     action: "ORDER_CANCEL",
     target: orderNo,
     meta: { attachments: attachments.length },
