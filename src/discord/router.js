@@ -44,7 +44,7 @@ export async function routeInteraction(interaction) {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "shop_select") return openOrderModal(interaction);
       if (interaction.customId.startsWith("ticket_model_select:")) return handleTicketVehicleSelect(interaction);
-      if (interaction.customId.startsWith("admin:packs:select:")) return handleManagePacksSelect(interaction);
+      if (interaction.customId.startsWith("admin:packs:")) return handleManagePacksSelect(interaction);
       return;
     }
 
@@ -88,7 +88,13 @@ export async function routeInteraction(interaction) {
           id === "admin:packs:refresh" ||
           id.startsWith("admin:packs:view:") ||
           id.startsWith("admin:packs:edit_field:") ||
-          id.startsWith("admin:packs:add_details:")
+          id.startsWith("admin:packs:add_details:") ||
+          id.startsWith("admin:packs:content:") ||
+          id.startsWith("admin:packs:back_to_edit:") ||
+          id.startsWith("admin:packs:content_list:") ||
+          id.startsWith("admin:packs:content_add:") ||
+          id.startsWith("admin:packs:content_edit:") ||
+          id.startsWith("admin:packs:content_delete:")
         ) {
           return handleManagePacksButton(interaction);
         }

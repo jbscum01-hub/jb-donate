@@ -17,20 +17,18 @@ import { ENV } from "../../config/env.js";
 import { safeReply } from "../utils/messages.js";
 
 const PACK_TYPES = ["DONATE", "VIP", "BOOST", "EVENT"];
+const VEHICLE_KINDS = ["CAR", "BIKE", "AIR"];
 const PAGE_SIZE = 10;
 
 function money(n) {
   return `${Number(n || 0).toLocaleString("th-TH")}`;
 }
-
 function yn(v) {
   return v ? "🟢 Active" : "🔴 Inactive";
 }
-
 function normalizePackCode(v) {
   return String(v || "").trim().toUpperCase();
 }
-
 function parseTextBool(v, fallback = true) {
   const s = String(v ?? "").trim().toLowerCase();
   if (!s) return fallback;
@@ -38,34 +36,39 @@ function parseTextBool(v, fallback = true) {
   if (["false", "0", "no", "n", "off", "inactive"].includes(s)) return false;
   throw new Error("is_active ต้องเป็น true หรือ false");
 }
-
 function parseIntStrict(v, label) {
   const n = Number(String(v ?? "").trim());
   if (!Number.isInteger(n)) throw new Error(`${label} ต้องเป็นจำนวนเต็ม`);
   return n;
 }
-
 function truncate(s, max = 100) {
   const text = String(s || "");
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+function normalizeColorInput(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^0x/i.test(raw)) return Number(raw);
+  if (/^[0-9]+$/.test(raw)) return Number(raw);
+  if (/^[A-Fa-f0-9]{6}$/.test(raw)) return parseInt(raw, 16);
+  throw new Error("embed_color ต้องเป็นเลข หรือ hex 6 หลัก");
 }
 
 function mainMenuEmbed() {
   return new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle("📦 Manage Packs")
-    .setDescription(
-      [
-        "เมนูจัดการ Donate Packs",
-        "",
-        "• View Packs",
-        "• Add Pack",
-        "• Edit Pack",
-        "• Toggle Pack Active",
-        "• Delete Pack (Safe)",
-        "• Sync Pack Panel",
-      ].join("\n")
-    )
+    .setDescription([
+      "เมนูจัดการ Donate Packs",
+      "",
+      "• View Packs",
+      "• Add Pack",
+      "• Edit Pack",
+      "• Preview Pack",
+      "• Toggle Pack Active",
+      "• Delete Pack (Safe)",
+      "• Sync Pack Panel",
+    ].join("\n"))
     .setFooter({ text: "เลือก pack ก่อน แล้วค่อยเลือก action" });
 }
 
@@ -87,45 +90,24 @@ function mainMenuComponents() {
 
 function buildPackListEmbed(data) {
   const totalPages = Math.max(1, Math.ceil((data.total || 0) / data.limit));
-  const embed = new EmbedBuilder()
-    .setColor(0x2b2d31)
-    .setTitle("📦 Pack List")
-    .setFooter({ text: `Page ${data.page}/${totalPages} • Total ${data.total}` });
-
-  if (!data.rows.length) {
-    embed.setDescription("ยังไม่มี pack ในระบบ");
-    return embed;
-  }
-
-  embed.setDescription(
+  const embed = new EmbedBuilder().setColor(0x2b2d31).setTitle("📦 Pack List").setFooter({ text: `Page ${data.page}/${totalPages} • Total ${data.total}` });
+  if (!data.rows.length) return embed.setDescription("ยังไม่มี pack ในระบบ");
+  return embed.setDescription(
     data.rows
-      .map(
-        (pack) =>
-          `**${pack.sort_order}. ${pack.pack_name}**\n\`${pack.pack_code}\` • ${pack.pack_type} • ${money(pack.price)} บาท\n${yn(pack.is_active)}`
-      )
+      .map((pack) => `**${pack.sort_order}. ${pack.pack_name}**\n\`${pack.pack_code}\` • ${pack.pack_type} • ${money(pack.price)} บาท\n${yn(pack.is_active)}`)
       .join("\n\n")
   );
-  return embed;
 }
 
 function buildPackListComponents(data) {
   const totalPages = Math.max(1, Math.ceil((data.total || 0) / data.limit));
   const rows = [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`admin:packs:view:${Math.max(1, data.page - 1)}`)
-        .setLabel("◀ Prev")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(data.page <= 1),
-      new ButtonBuilder()
-        .setCustomId(`admin:packs:view:${Math.min(totalPages, data.page + 1)}`)
-        .setLabel("Next ▶")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(data.page >= totalPages),
+      new ButtonBuilder().setCustomId(`admin:packs:view:${Math.max(1, data.page - 1)}`).setLabel("◀ Prev").setStyle(ButtonStyle.Secondary).setDisabled(data.page <= 1),
+      new ButtonBuilder().setCustomId(`admin:packs:view:${Math.min(totalPages, data.page + 1)}`).setLabel("Next ▶").setStyle(ButtonStyle.Secondary).setDisabled(data.page >= totalPages),
       new ButtonBuilder().setCustomId("admin:packs:menu").setLabel("Back").setStyle(ButtonStyle.Primary)
     ),
   ];
-
   if (data.rows.length) {
     rows.push(
       new ActionRowBuilder().addComponents(
@@ -142,11 +124,11 @@ function buildPackListComponents(data) {
       )
     );
   }
-
   return rows;
 }
 
 function buildPackDetailEmbed(pack, mode = "detail") {
+  const contentCounts = [`Benefit ${pack.benefitRows?.length || 0}`, `Item ${pack.items?.length || 0}`, `Vehicle ${pack.vehicleRows?.length || 0}`, `Boat ${pack.boatRows?.length || 0}`].join(" • ");
   const embed = new EmbedBuilder()
     .setColor(pack.is_active ? 0x57f287 : 0xed4245)
     .setTitle(`${mode === "preview" ? "👁️ Preview Pack" : "📦 Pack Detail"} • ${pack.pack_name}`)
@@ -156,12 +138,13 @@ function buildPackDetailEmbed(pack, mode = "detail") {
       { name: "Status", value: yn(pack.is_active), inline: true },
       { name: "Price", value: `${money(pack.price)} บาท`, inline: true },
       { name: "Sort", value: String(pack.sort_order ?? 0), inline: true },
+      { name: "Color", value: pack.embed_color == null ? "-" : String(pack.embed_color), inline: true },
       { name: "Image", value: pack.image_url || "-", inline: false },
       { name: "Summary", value: truncate(pack.panel_summary || pack.description || "-", 1024), inline: false },
       { name: "Description", value: truncate(pack.description || "-", 1024), inline: false },
+      { name: "Pack Contents", value: contentCounts, inline: false },
     )
     .setFooter({ text: `Pack ID: ${pack.pack_id}` });
-
   if (pack.image_url) embed.setThumbnail(pack.image_url);
   return embed;
 }
@@ -196,56 +179,33 @@ function buildEditFieldComponents(packId) {
       new ButtonBuilder().setCustomId(`admin:packs:edit_field:${packId}:embed_color`).setLabel("Edit Color").setStyle(ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("admin:packs:menu").setLabel("Back").setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`admin:packs:content:${packId}`).setLabel("Edit Pack Contents").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("admin:packs:menu").setLabel("Back").setStyle(ButtonStyle.Primary),
     ),
   ];
 }
 
 function addPackModal() {
   const modal = new ModalBuilder().setCustomId("admin:packs:modal_add").setTitle("Add Donate Pack");
-
   modal.addComponents(
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("pack_code").setLabel("pack_code").setStyle(TextInputStyle.Short).setRequired(true)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("pack_name").setLabel("pack_name").setStyle(TextInputStyle.Short).setRequired(true)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("pack_type").setLabel("pack_type (DONATE/VIP/BOOST/EVENT)").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("DONATE")
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("price").setLabel("price").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("199")
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("1")
-    )
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pack_code").setLabel("pack_code").setStyle(TextInputStyle.Short).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pack_name").setLabel("pack_name").setStyle(TextInputStyle.Short).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("pack_type").setLabel("pack_type (DONATE/VIP/BOOST/EVENT)").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("DONATE")),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("price").setLabel("price").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("199")),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("1"))
   );
-
   return modal;
 }
 
 function addPackDetailsModal(packId) {
   const modal = new ModalBuilder().setCustomId(`admin:packs:modal_add_details:${packId}`).setTitle("Add Pack Details");
-
   modal.addComponents(
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("description").setLabel("description").setStyle(TextInputStyle.Paragraph).setRequired(false)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("panel_summary").setLabel("panel_summary").setStyle(TextInputStyle.Paragraph).setRequired(false)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("image_url").setLabel("image_url").setStyle(TextInputStyle.Short).setRequired(false)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("embed_color").setLabel("embed_color (number or hex เช่น 16766720 / FFAA00)").setStyle(TextInputStyle.Short).setRequired(false)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder().setCustomId("is_active").setLabel("is_active (true/false)").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder("true")
-    )
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("description").setLabel("description").setStyle(TextInputStyle.Paragraph).setRequired(false)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("panel_summary").setLabel("panel_summary").setStyle(TextInputStyle.Paragraph).setRequired(false)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("image_url").setLabel("image_url").setStyle(TextInputStyle.Short).setRequired(false)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("embed_color").setLabel("embed_color (number or hex)").setStyle(TextInputStyle.Short).setRequired(false)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("is_active").setLabel("is_active (true/false)").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder("true"))
   );
-
   return modal;
 }
 
@@ -254,55 +214,27 @@ function editFieldModal(packId, field, currentValue = "") {
   const isLong = ["description", "panel_summary"].includes(field);
   modal.addComponents(
     new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId("value")
-        .setLabel(field)
-        .setStyle(isLong ? TextInputStyle.Paragraph : TextInputStyle.Short)
-        .setRequired(false)
-        .setValue(String(currentValue ?? "").slice(0, 4000))
+      new TextInputBuilder().setCustomId("value").setLabel(field).setStyle(isLong ? TextInputStyle.Paragraph : TextInputStyle.Short).setRequired(false).setValue(String(currentValue ?? "").slice(0, 4000))
     )
   );
   return modal;
 }
 
-function normalizeColorInput(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  if (/^0x/i.test(raw)) return Number(raw);
-  if (/^[0-9]+$/.test(raw)) return Number(raw);
-  if (/^[A-Fa-f0-9]{6}$/.test(raw)) return parseInt(raw, 16);
-  throw new Error("embed_color ต้องเป็นเลข หรือ hex 6 หลัก");
-}
-
 function sanitizePackCreate(fields) {
   const pack_code = normalizePackCode(fields.pack_code);
   if (!pack_code) throw new Error("pack_code ห้ามว่าง");
-
   const pack_name = String(fields.pack_name || "").trim();
   if (!pack_name) throw new Error("pack_name ห้ามว่าง");
-
   const pack_type = String(fields.pack_type || "").trim().toUpperCase();
-  if (!PACK_TYPES.includes(pack_type)) {
-    throw new Error(`pack_type ต้องเป็น ${PACK_TYPES.join(", ")}`);
-  }
-
+  if (!PACK_TYPES.includes(pack_type)) throw new Error(`pack_type ต้องเป็น ${PACK_TYPES.join(", ")}`);
   const price = parseIntStrict(fields.price, "price");
   if (price < 0) throw new Error("price ต้องมากกว่าหรือเท่ากับ 0");
-
   const sort_order = parseIntStrict(fields.sort_order, "sort_order");
-
-  return {
-    pack_code,
-    pack_name,
-    pack_type,
-    price,
-    sort_order,
-  };
+  return { pack_code, pack_name, pack_type, price, sort_order };
 }
 
 function sanitizeUpdateField(field, rawValue) {
   const value = String(rawValue ?? "");
-
   switch (field) {
     case "pack_name": {
       const x = value.trim();
@@ -332,15 +264,222 @@ function sanitizeUpdateField(field, rawValue) {
   }
 }
 
+function contentTypeLabel(type) {
+  return { benefit: "Benefit", item: "Item", vehicle: "Vehicle", boat: "Boat" }[type] || type;
+}
+
+function contentMenuEmbed(pack) {
+  return new EmbedBuilder()
+    .setColor(0x3498db)
+    .setTitle(`🧩 Edit Pack Contents • ${pack.pack_name}`)
+    .setDescription([
+      `Benefit: ${pack.benefitRows?.length || 0}`,
+      `Item: ${pack.items?.length || 0}`,
+      `Vehicle: ${pack.vehicleRows?.length || 0}`,
+      `Boat: ${pack.boatRows?.length || 0}`,
+      "",
+      "เลือกหมวดที่จะจัดการด้านล่าง",
+    ].join("\n"));
+}
+
+function contentMenuComponents(packId) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin:packs:content_list:${packId}:benefit`).setLabel("Benefits").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`admin:packs:content_list:${packId}:item`).setLabel("Items").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`admin:packs:content_list:${packId}:vehicle`).setLabel("Vehicles").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`admin:packs:content_list:${packId}:boat`).setLabel("Boats").setStyle(ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin:packs:content_add:${packId}:benefit`).setLabel("Add Benefit").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`admin:packs:content_add:${packId}:item`).setLabel("Add Item").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`admin:packs:content_add:${packId}:vehicle`).setLabel("Add Vehicle").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`admin:packs:content_add:${packId}:boat`).setLabel("Add Boat").setStyle(ButtonStyle.Success),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin:packs:back_to_edit:${packId}`).setLabel("Back To Pack").setStyle(ButtonStyle.Primary)
+    ),
+  ];
+}
+
+function contentListEmbed(pack, type, rows) {
+  return new EmbedBuilder().setColor(0x9b59b6).setTitle(`🧩 ${contentTypeLabel(type)} • ${pack.pack_name}`).setDescription(
+    rows.length
+      ? rows.map((row, idx) => {
+          if (type === "benefit") return `**${idx + 1}.** ${row.benefit_text} (sort ${row.sort_order})`;
+          if (type === "item") return `**${idx + 1}.** ${row.item_name} x${row.quantity} (sort ${row.sort_order})`;
+          if (type === "vehicle") return `**${idx + 1}.** ${row.vehicle_name} • ${row.vehicle_model} (${row.vehicle_kind})`;
+          return `**${idx + 1}.** ${row.boat_name} • ${row.boat_model}`;
+        }).join("\n")
+      : "ยังไม่มีรายการ"
+  );
+}
+
+function contentSelectRow(packId, type, rows) {
+  if (!rows.length) return null;
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`admin:packs:content_select:${packId}:${type}`)
+      .setPlaceholder(`เลือก ${contentTypeLabel(type)} เพื่อแก้ไข`)
+      .addOptions(
+        rows.slice(0, 25).map((row) => ({
+          label: truncate(row.title || row.item_name || row.vehicle_name || row.boat_name || row.benefit_text, 100),
+          description: truncate(type === "benefit" ? `sort ${row.sort_order}` : type === "item" ? `qty ${row.quantity} • sort ${row.sort_order}` : `sort ${row.sort_order}`, 100),
+          value: row.content_id,
+        }))
+      )
+  );
+}
+
+function contentActionButtons(packId, type, contentId) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin:packs:content_edit:${packId}:${type}:${contentId}`).setLabel("Edit This").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`admin:packs:content_delete:${packId}:${type}:${contentId}`).setLabel("Delete This").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`admin:packs:content_list:${packId}:${type}`).setLabel("Back To List").setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+}
+
+function contentEntryEmbed(pack, type, row) {
+  const embed = new EmbedBuilder().setColor(0xf1c40f).setTitle(`✏️ ${contentTypeLabel(type)} • ${pack.pack_name}`);
+  if (type === "benefit") embed.setDescription(`ข้อความ: ${row.benefit_text}\nSort: ${row.sort_order}`);
+  if (type === "item") embed.setDescription(`ชื่อ: ${row.item_name}\nจำนวน: ${row.quantity}\nSort: ${row.sort_order}\nSpawn: ${row.item_spawn_command_template || "-"}`);
+  if (type === "vehicle") embed.setDescription(`ชื่อ: ${row.vehicle_name}\nModel: ${row.vehicle_model}\nKind: ${row.vehicle_kind}\nIns: ${row.insurance_total}/${row.insurance_days}\nSort: ${row.sort_order}`);
+  if (type === "boat") embed.setDescription(`ชื่อ: ${row.boat_name}\nModel: ${row.boat_model}\nIns: ${row.insurance_total}/${row.insurance_days}\nSort: ${row.sort_order}`);
+  return embed.setFooter({ text: `ID: ${row.content_id}` });
+}
+
+function contentAddModal(packId, type) {
+  const modal = new ModalBuilder().setCustomId(`admin:packs:modal_content_add:${packId}:${type}`).setTitle(`Add ${contentTypeLabel(type)}`);
+  if (type === "benefit") {
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("benefit_text").setLabel("benefit_text").setStyle(TextInputStyle.Paragraph).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setValue("0"))
+    );
+    return modal;
+  }
+  if (type === "item") {
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("item_name").setLabel("item_name").setStyle(TextInputStyle.Short).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("quantity").setLabel("quantity").setStyle(TextInputStyle.Short).setRequired(true).setValue("1")),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("item_spawn_command_template").setLabel("spawn_command (optional)").setStyle(TextInputStyle.Paragraph).setRequired(false)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("item_group").setLabel("item_group (optional)").setStyle(TextInputStyle.Short).setRequired(false)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setValue("0"))
+    );
+    return modal;
+  }
+  if (type === "vehicle") {
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("vehicle_name").setLabel("vehicle_name").setStyle(TextInputStyle.Short).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("vehicle_model").setLabel("vehicle_model").setStyle(TextInputStyle.Short).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("vehicle_kind").setLabel("vehicle_kind (CAR/BIKE/AIR)").setStyle(TextInputStyle.Short).setRequired(true).setValue("CAR")),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("insurance_text").setLabel("insurance_total,insurance_days").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder("0,0")),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setValue("0"))
+    );
+    return modal;
+  }
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("boat_name").setLabel("boat_name").setStyle(TextInputStyle.Short).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("boat_model").setLabel("boat_model").setStyle(TextInputStyle.Short).setRequired(true)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("insurance_text").setLabel("insurance_total,insurance_days").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder("0,0")),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("spawn_command_template").setLabel("spawn_command (optional)").setStyle(TextInputStyle.Paragraph).setRequired(false)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setValue("0"))
+  );
+  return modal;
+}
+
+function contentEditModal(packId, type, row) {
+  const modal = new ModalBuilder().setCustomId(`admin:packs:modal_content_edit:${packId}:${type}:${row.content_id}`).setTitle(`Edit ${contentTypeLabel(type)}`);
+  if (type === "benefit") {
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("benefit_text").setLabel("benefit_text").setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(String(row.benefit_text || "").slice(0, 4000))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.sort_order ?? 0)))
+    );
+    return modal;
+  }
+  if (type === "item") {
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("item_name").setLabel("item_name").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.item_name || "").slice(0, 4000))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("quantity").setLabel("quantity").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.quantity ?? 1))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("item_spawn_command_template").setLabel("spawn_command").setStyle(TextInputStyle.Paragraph).setRequired(false).setValue(String(row.item_spawn_command_template || "").slice(0, 4000))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("item_group").setLabel("item_group").setStyle(TextInputStyle.Short).setRequired(false).setValue(String(row.item_group || "").slice(0, 4000))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.sort_order ?? 0)))
+    );
+    return modal;
+  }
+  if (type === "vehicle") {
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("vehicle_name").setLabel("vehicle_name").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.vehicle_name || "").slice(0, 4000))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("vehicle_model").setLabel("vehicle_model").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.vehicle_model || "").slice(0, 4000))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("vehicle_kind").setLabel("vehicle_kind (CAR/BIKE/AIR)").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.vehicle_kind || "CAR").slice(0, 4000))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("insurance_text").setLabel("insurance_total,insurance_days").setStyle(TextInputStyle.Short).setRequired(false).setValue(`${Number(row.insurance_total || 0)},${Number(row.insurance_days || 0)}`)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.sort_order ?? 0)))
+    );
+    return modal;
+  }
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("boat_name").setLabel("boat_name").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.boat_name || "").slice(0, 4000))),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("boat_model").setLabel("boat_model").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.boat_model || "").slice(0, 4000))),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("insurance_text").setLabel("insurance_total,insurance_days").setStyle(TextInputStyle.Short).setRequired(false).setValue(`${Number(row.insurance_total || 0)},${Number(row.insurance_days || 0)}`)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("spawn_command_template").setLabel("spawn_command").setStyle(TextInputStyle.Paragraph).setRequired(false).setValue(String(row.spawn_command_template || "").slice(0, 4000))),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("sort_order").setLabel("sort_order").setStyle(TextInputStyle.Short).setRequired(true).setValue(String(row.sort_order ?? 0)))
+  );
+  return modal;
+}
+
+function parseInsuranceText(v) {
+  const raw = String(v || "").trim();
+  if (!raw) return { insurance_total: 0, insurance_days: 0 };
+  const [a, b] = raw.split(",").map((x) => Number(String(x).trim() || 0));
+  if (!Number.isInteger(a) || !Number.isInteger(b)) throw new Error("insurance_total,insurance_days ต้องเป็นจำนวนเต็ม เช่น 0,0");
+  return { insurance_total: a, insurance_days: b };
+}
+
+function sanitizeContentFields(type, fields) {
+  if (type === "benefit") {
+    return { benefit_text: String(fields.benefit_text || "").trim(), sort_order: parseIntStrict(fields.sort_order, "sort_order") };
+  }
+  if (type === "item") {
+    return {
+      item_name: String(fields.item_name || "").trim(),
+      quantity: parseIntStrict(fields.quantity, "quantity"),
+      item_spawn_command_template: String(fields.item_spawn_command_template || "").trim() || null,
+      item_group: String(fields.item_group || "").trim() || null,
+      item_code: null,
+      item_spawn_name: null,
+      sort_order: parseIntStrict(fields.sort_order, "sort_order"),
+    };
+  }
+  if (type === "vehicle") {
+    const kind = String(fields.vehicle_kind || "CAR").trim().toUpperCase();
+    if (!VEHICLE_KINDS.includes(kind)) throw new Error(`vehicle_kind ต้องเป็น ${VEHICLE_KINDS.join(", ")}`);
+    return {
+      vehicle_code: null,
+      vehicle_name: String(fields.vehicle_name || "").trim(),
+      vehicle_model: String(fields.vehicle_model || "").trim(),
+      vehicle_kind: kind,
+      spawn_command_template: null,
+      ...parseInsuranceText(fields.insurance_text),
+      sort_order: parseIntStrict(fields.sort_order, "sort_order"),
+    };
+  }
+  return {
+    boat_code: null,
+    boat_name: String(fields.boat_name || "").trim(),
+    boat_model: String(fields.boat_model || "").trim(),
+    spawn_command_template: String(fields.spawn_command_template || "").trim() || null,
+    ...parseInsuranceText(fields.insurance_text),
+    sort_order: parseIntStrict(fields.sort_order, "sort_order"),
+  };
+}
+
 async function syncShopPanel(client) {
   if (!ENV.SHOP_CHANNEL_ID) throw new Error("Missing SHOP_CHANNEL_ID");
-
   const channel = await client.channels.fetch(ENV.SHOP_CHANNEL_ID).catch(() => null);
   if (!channel) throw new Error("Cannot fetch shop channel");
-
   const payload = await buildShopPanel();
   const existingId = process.env.PANEL_MESSAGE_ID || "";
-
   if (existingId) {
     const msg = await channel.messages.fetch(existingId).catch(() => null);
     if (msg) {
@@ -348,7 +487,6 @@ async function syncShopPanel(client) {
       return { mode: "EDIT", messageId: msg.id };
     }
   }
-
   const sent = await channel.send(payload);
   await sent.pin().catch(() => {});
   return { mode: "CREATE", messageId: sent.id };
@@ -365,14 +503,22 @@ async function logPackAction(interaction, action, target, meta = null) {
   });
 }
 
-async function replyOrUpdate(interaction, payload) {
-  if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(payload);
-  }
-  if (typeof interaction.update === "function") {
-    return interaction.update(payload);
-  }
-  return interaction.reply(payload);
+
+function getModalValues(interaction) {
+  return Object.fromEntries(Array.from(interaction.fields.fields.values()).map((f) => [f.customId, f.value]));
+}
+
+function buildContentListPayload(pack, type, rows) {
+  const components = [];
+  const select = contentSelectRow(pack.pack_id, type, rows);
+  if (select) components.push(select);
+  components.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin:packs:content_add:${pack.pack_id}:${type}`).setLabel(`Add ${contentTypeLabel(type)}`).setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`admin:packs:content:${pack.pack_id}`).setLabel("Back To Contents").setStyle(ButtonStyle.Primary)
+    )
+  );
+  return { embeds: [contentListEmbed(pack, type, rows)], components };
 }
 
 export async function handleManagePacksButton(interaction) {
@@ -447,14 +593,12 @@ export async function handleManagePacksButton(interaction) {
 
   if (id.startsWith("admin:packs:edit_field:")) {
     const parts = id.split(":");
-    const packId = parts[4];
-    const field = parts[5];
-
+    const packId = parts[3];
+    const field = parts[4];
     if (!packId || !field) {
       await safeReply(interaction, { content: "❌ รหัสการแก้ไข pack ไม่ถูกต้อง", ephemeral: true });
       return true;
     }
-
     const pack = await DonatePackRepo.getPackById(packId);
     if (!pack) {
       await safeReply(interaction, { content: "❌ ไม่พบ pack ที่เลือก", ephemeral: true });
@@ -470,17 +614,85 @@ export async function handleManagePacksButton(interaction) {
     return true;
   }
 
+  if (id.startsWith("admin:packs:content:")) {
+    const packId = id.split(":")[3];
+    const pack = await DonatePackRepo.getPackFullById(packId);
+    if (!pack) {
+      await safeReply(interaction, { content: "❌ ไม่พบ pack", ephemeral: true });
+      return true;
+    }
+    await interaction.update({ content: "กำลังจัดการของในแพ็ก", embeds: [contentMenuEmbed(pack)], components: contentMenuComponents(packId) });
+    return true;
+  }
+
+  if (id.startsWith("admin:packs:back_to_edit:")) {
+    const packId = id.split(":")[3];
+    const pack = await DonatePackRepo.getPackFullById(packId);
+    if (!pack) {
+      await safeReply(interaction, { content: "❌ ไม่พบ pack", ephemeral: true });
+      return true;
+    }
+    await interaction.update({ content: `กำลังแก้ pack: **${pack.pack_name}** (\`${pack.pack_code}\`)`, embeds: [buildPackDetailEmbed(pack)], components: buildEditFieldComponents(pack.pack_id) });
+    return true;
+  }
+
+  if (id.startsWith("admin:packs:content_list:")) {
+    const [, , , packId, type] = id.split(":");
+    const [pack, rows] = await Promise.all([DonatePackRepo.getPackById(packId), DonatePackRepo.listPackContent(packId, type)]);
+    await interaction.update(buildContentListPayload(pack, type, rows));
+    return true;
+  }
+
+  if (id.startsWith("admin:packs:content_add:")) {
+    const [, , , packId, type] = id.split(":");
+    await interaction.showModal(contentAddModal(packId, type));
+    return true;
+  }
+
+  if (id.startsWith("admin:packs:content_edit:")) {
+    const [, , , packId, type, contentId] = id.split(":");
+    const row = await DonatePackRepo.getPackContentEntry(type, contentId);
+    if (!row) {
+      await safeReply(interaction, { content: "❌ ไม่พบรายการ", ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(contentEditModal(packId, type, row));
+    return true;
+  }
+
+  if (id.startsWith("admin:packs:content_delete:")) {
+    const [, , , packId, type, contentId] = id.split(":");
+    const pack = await DonatePackRepo.getPackById(packId);
+    await DonatePackRepo.softDeletePackContent(type, contentId);
+    await logPackAction(interaction, "PACK_CONTENT_DELETE", pack?.pack_code || packId, { type, contentId });
+    const rows = await DonatePackRepo.listPackContent(packId, type);
+    await interaction.update({ content: `✅ ลบ ${contentTypeLabel(type)} แล้ว`, ...buildContentListPayload(pack, type, rows) });
+    return true;
+  }
+
   return false;
 }
 
 export async function handleManagePacksSelect(interaction) {
   if (!interaction.isStringSelectMenu()) return false;
-  if (!interaction.customId.startsWith("admin:packs:select:")) return false;
+  if (!interaction.customId.startsWith("admin:packs:")) return false;
 
+  if (interaction.customId.startsWith("admin:packs:content_select:")) {
+    const [, , , packId, type] = interaction.customId.split(":");
+    const contentId = interaction.values?.[0];
+    const [pack, row] = await Promise.all([DonatePackRepo.getPackById(packId), DonatePackRepo.getPackContentEntry(type, contentId)]);
+    if (!pack || !row) {
+      await safeReply(interaction, { content: "❌ ไม่พบรายการที่เลือก", ephemeral: true });
+      return true;
+    }
+    await interaction.update({ content: `กำลังแก้ ${contentTypeLabel(type)} ของ **${pack.pack_name}**`, embeds: [contentEntryEmbed(pack, type, row)], components: contentActionButtons(packId, type, contentId) });
+    return true;
+  }
+
+  if (!interaction.customId.startsWith("admin:packs:select:")) return false;
   const mode = interaction.customId.split(":")[3];
   const packId = interaction.values?.[0];
-  const pack = await DonatePackRepo.getPackById(packId);
-
+  const pack = await DonatePackRepo.getPackFullById(packId);
   if (!pack) {
     await safeReply(interaction, { content: "❌ ไม่พบ pack ที่เลือก", ephemeral: true });
     return true;
@@ -490,44 +702,27 @@ export async function handleManagePacksSelect(interaction) {
     await interaction.update({ embeds: [buildPackDetailEmbed(pack)], components: [] });
     return true;
   }
-
   if (mode === "preview") {
     await interaction.update({ embeds: [buildPackDetailEmbed(pack, "preview")], components: [] });
     return true;
   }
-
   if (mode === "edit") {
-    await interaction.update({
-      content: `กำลังแก้ pack: **${pack.pack_name}** (\`${pack.pack_code}\`)`,
-      embeds: [buildPackDetailEmbed(pack)],
-      components: buildEditFieldComponents(pack.pack_id),
-    });
+    await interaction.update({ content: `กำลังแก้ pack: **${pack.pack_name}** (\`${pack.pack_code}\`)`, embeds: [buildPackDetailEmbed(pack)], components: buildEditFieldComponents(pack.pack_id) });
     return true;
   }
-
   if (mode === "toggle") {
     const updated = await DonatePackRepo.updatePackFields(pack.pack_id, { is_active: !pack.is_active }, interaction.user.tag ?? interaction.user.username);
-    await logPackAction(interaction, updated.is_active ? "PACK_ACTIVATE" : "PACK_DEACTIVATE", updated.pack_code, {
-      before_is_active: pack.is_active,
-      after_is_active: updated.is_active,
-    });
-    await interaction.update({
-      content: `✅ อัปเดตสถานะแล้ว: **${updated.pack_name}** → ${yn(updated.is_active)}`,
-      embeds: [buildPackDetailEmbed(updated)],
-      components: [],
-    });
+    await logPackAction(interaction, updated.is_active ? "PACK_ACTIVATE" : "PACK_DEACTIVATE", updated.pack_code, { before_is_active: pack.is_active, after_is_active: updated.is_active });
+    const full = await DonatePackRepo.getPackFullById(updated.pack_id);
+    await interaction.update({ content: `✅ อัปเดตสถานะแล้ว: **${updated.pack_name}** → ${yn(updated.is_active)}`, embeds: [buildPackDetailEmbed(full)], components: [] });
     return true;
   }
-
   if (mode === "delete") {
     const orderCount = await DonatePackRepo.countOrdersByPackId(pack.pack_id);
     const updated = await DonatePackRepo.updatePackFields(pack.pack_id, { is_active: false }, interaction.user.tag ?? interaction.user.username);
     await logPackAction(interaction, "PACK_SAFE_DELETE", updated.pack_code, { orderCount, action: "set is_active = false" });
-    await interaction.update({
-      content: `✅ Safe delete แล้ว: **${updated.pack_name}**\nระบบจะปิดการขายแทน ไม่ลบจริง${orderCount > 0 ? `\nออเดอร์ที่ผูกอยู่: ${orderCount}` : ""}`,
-      embeds: [buildPackDetailEmbed(updated)],
-      components: [],
-    });
+    const full = await DonatePackRepo.getPackFullById(updated.pack_id);
+    await interaction.update({ content: `✅ Safe delete แล้ว: **${updated.pack_name}**\nระบบจะปิดการขายแทน ไม่ลบจริง${orderCount > 0 ? `\nออเดอร์ที่ผูกอยู่: ${orderCount}` : ""}`, embeds: [buildPackDetailEmbed(full)], components: [] });
     return true;
   }
 
@@ -548,30 +743,20 @@ export async function handleManagePacksModal(interaction) {
         price: interaction.fields.getTextInputValue("price"),
         sort_order: interaction.fields.getTextInputValue("sort_order"),
       });
-
       const existing = await DonatePackRepo.getPackByCode(base.pack_code);
       if (existing) throw new Error(`pack_code ซ้ำ: ${base.pack_code}`);
 
-      const created = await DonatePackRepo.createPack({
-        ...base,
-        description: null,
-        panel_summary: null,
-        image_url: null,
-        embed_color: null,
-        is_active: true,
-        actorTag: interaction.user.tag ?? interaction.user.username,
-      });
-
+      const created = await DonatePackRepo.createPack({ ...base, description: null, panel_summary: null, image_url: null, embed_color: null, is_active: true, actorTag: interaction.user.tag ?? interaction.user.username });
       await logPackAction(interaction, "PACK_CREATE", created.pack_code, { pack_id: created.pack_id });
-
+      const full = await DonatePackRepo.getPackFullById(created.pack_id);
       await interaction.editReply({
         content: `✅ สร้าง pack แล้ว: **${created.pack_name}** (\`${created.pack_code}\`)`,
-        embeds: [buildPackDetailEmbed(created)],
+        embeds: [buildPackDetailEmbed(full)],
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(`admin:packs:add_details:${created.pack_id}`).setLabel("Add Details").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId("admin:packs:refresh").setLabel("Sync Pack Panel").setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId("admin:packs:menu").setLabel("Back").setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`admin:packs:content:${created.pack_id}`).setLabel("Edit Pack Contents").setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId("admin:packs:refresh").setLabel("Sync Pack Panel").setStyle(ButtonStyle.Secondary)
           ),
         ],
       });
@@ -583,7 +768,7 @@ export async function handleManagePacksModal(interaction) {
 
   if (interaction.customId.startsWith("admin:packs:modal_add_details:")) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const packId = interaction.customId.split(":")[4];
+    const packId = interaction.customId.split(":")[3];
     try {
       const fields = {
         description: interaction.fields.getTextInputValue("description").trim() || null,
@@ -592,16 +777,11 @@ export async function handleManagePacksModal(interaction) {
         embed_color: normalizeColorInput(interaction.fields.getTextInputValue("embed_color")),
         is_active: parseTextBool(interaction.fields.getTextInputValue("is_active"), true),
       };
-
       const updated = await DonatePackRepo.updatePackFields(packId, fields, interaction.user.tag ?? interaction.user.username);
       if (!updated) throw new Error("ไม่พบ pack ที่จะอัปเดต");
-
       await logPackAction(interaction, "PACK_UPDATE_DETAILS", updated.pack_code, { fields: Object.keys(fields) });
-      await interaction.editReply({
-        content: `✅ เพิ่มรายละเอียด pack สำเร็จ: **${updated.pack_name}**`,
-        embeds: [buildPackDetailEmbed(updated)],
-        components: [],
-      });
+      const full = await DonatePackRepo.getPackFullById(updated.pack_id);
+      await interaction.editReply({ content: `✅ เพิ่มรายละเอียด pack สำเร็จ: **${updated.pack_name}**`, embeds: [buildPackDetailEmbed(full)], components: [] });
     } catch (err) {
       await interaction.editReply(`❌ บันทึกรายละเอียดไม่สำเร็จ: ${err.message}`);
     }
@@ -610,25 +790,50 @@ export async function handleManagePacksModal(interaction) {
 
   if (interaction.customId.startsWith("admin:packs:modal_edit_field:")) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const [, , , field, packId] = interaction.customId.split(":").reverse();
-    const allParts = interaction.customId.split(":");
-    const truePackId = allParts[4];
-    const trueField = allParts[5];
-
+    const parts = interaction.customId.split(":");
+    const truePackId = parts[3];
+    const trueField = parts[4];
     try {
       const value = interaction.fields.getTextInputValue("value");
       const updatedValue = sanitizeUpdateField(trueField, value);
       const updated = await DonatePackRepo.updatePackFields(truePackId, { [trueField]: updatedValue }, interaction.user.tag ?? interaction.user.username);
       if (!updated) throw new Error("ไม่พบ pack ที่จะอัปเดต");
-
       await logPackAction(interaction, "PACK_UPDATE_FIELD", updated.pack_code, { field: trueField });
-      await interaction.editReply({
-        content: `✅ อัปเดต ${trueField} สำเร็จสำหรับ **${updated.pack_name}**`,
-        embeds: [buildPackDetailEmbed(updated)],
-        components: buildEditFieldComponents(updated.pack_id),
-      });
+      const full = await DonatePackRepo.getPackFullById(updated.pack_id);
+      await interaction.editReply({ content: `✅ อัปเดต ${trueField} สำเร็จสำหรับ **${updated.pack_name}**`, embeds: [buildPackDetailEmbed(full)], components: buildEditFieldComponents(updated.pack_id) });
     } catch (err) {
       await interaction.editReply(`❌ แก้ไขไม่สำเร็จ: ${err.message}`);
+    }
+    return true;
+  }
+
+  if (interaction.customId.startsWith("admin:packs:modal_content_add:")) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const [, , , packId, type] = interaction.customId.split(":");
+    try {
+      const fields = sanitizeContentFields(type, getModalValues(interaction));
+      const created = await DonatePackRepo.addPackContent(packId, type, fields);
+      const pack = await DonatePackRepo.getPackById(packId);
+      await logPackAction(interaction, "PACK_CONTENT_ADD", pack?.pack_code || packId, { type, contentId: created.content_id });
+      const rows = await DonatePackRepo.listPackContent(packId, type);
+      await interaction.editReply({ content: `✅ เพิ่ม ${contentTypeLabel(type)} สำเร็จ`, ...buildContentListPayload(pack, type, rows) });
+    } catch (err) {
+      await interaction.editReply(`❌ เพิ่มของในแพ็กไม่สำเร็จ: ${err.message}`);
+    }
+    return true;
+  }
+
+  if (interaction.customId.startsWith("admin:packs:modal_content_edit:")) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const [, , , packId, type, contentId] = interaction.customId.split(":");
+    try {
+      const fields = sanitizeContentFields(type, getModalValues(interaction));
+      const updated = await DonatePackRepo.updatePackContent(type, contentId, fields);
+      const pack = await DonatePackRepo.getPackById(packId);
+      await logPackAction(interaction, "PACK_CONTENT_EDIT", pack?.pack_code || packId, { type, contentId });
+      await interaction.editReply({ content: `✅ แก้ ${contentTypeLabel(type)} สำเร็จ`, embeds: [contentEntryEmbed(pack, type, updated)], components: contentActionButtons(packId, type, contentId) });
+    } catch (err) {
+      await interaction.editReply(`❌ แก้ของในแพ็กไม่สำเร็จ: ${err.message}`);
     }
     return true;
   }
@@ -637,8 +842,5 @@ export async function handleManagePacksModal(interaction) {
 }
 
 export function buildManagePacksMenuPayload() {
-  return {
-    embeds: [mainMenuEmbed()],
-    components: mainMenuComponents(),
-  };
+  return { embeds: [mainMenuEmbed()], components: mainMenuComponents() };
 }
