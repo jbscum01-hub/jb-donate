@@ -319,7 +319,7 @@ function contentSelectRow(packId, type, rows) {
   if (!rows.length) return null;
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(`admin:packs:content_select:${packId}:${type}`)
+      .setCustomId(`admin:packs:content_select:${type}`)
       .setPlaceholder(`เลือก ${contentTypeLabel(type)} เพื่อแก้ไข`)
       .addOptions(
         rows.slice(0, 25).map((row) => ({
@@ -334,8 +334,8 @@ function contentSelectRow(packId, type, rows) {
 function contentActionButtons(packId, type, contentId) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`admin:packs:content_edit:${packId}:${type}:${contentId}`).setLabel("Edit This").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`admin:packs:content_delete:${packId}:${type}:${contentId}`).setLabel("Delete This").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`admin:packs:content_edit:${type}:${contentId}`).setLabel("Edit This").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`admin:packs:content_delete:${type}:${contentId}`).setLabel("Delete This").setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`admin:packs:content_list:${packId}:${type}`).setLabel("Back To List").setStyle(ButtonStyle.Secondary),
     ),
   ];
@@ -390,7 +390,7 @@ function contentAddModal(packId, type) {
 }
 
 function contentEditModal(packId, type, row) {
-  const modal = new ModalBuilder().setCustomId(`admin:packs:modal_content_edit:${packId}:${type}:${row.content_id}`).setTitle(`Edit ${contentTypeLabel(type)}`);
+  const modal = new ModalBuilder().setCustomId(`admin:packs:modal_content_edit:${type}:${row.content_id}`).setTitle(`Edit ${contentTypeLabel(type)}`);
   if (type === "benefit") {
     modal.addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("benefit_text").setLabel("benefit_text").setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(String(row.benefit_text || "").slice(0, 4000))),
@@ -661,11 +661,12 @@ export async function handleManagePacksButton(interaction) {
   }
 
   if (id.startsWith("admin:packs:content_delete:")) {
-    const [, , , packId, type, contentId] = id.split(":");
-    const pack = await DonatePackRepo.getPackById(packId);
+    const [, , , type, contentId] = id.split(":");
+    const currentRow = await DonatePackRepo.getPackContentEntry(type, contentId);
+    const pack = currentRow ? await DonatePackRepo.getPackById(currentRow.pack_id) : null;
     await DonatePackRepo.softDeletePackContent(type, contentId);
     await logPackAction(interaction, "PACK_CONTENT_DELETE", pack?.pack_code || packId, { type, contentId });
-    const rows = await DonatePackRepo.listPackContent(packId, type);
+    const rows = await DonatePackRepo.listPackContent(pack?.pack_id, type);
     await interaction.update({ content: `✅ ลบ ${contentTypeLabel(type)} แล้ว`, ...buildContentListPayload(pack, type, rows) });
     return true;
   }
@@ -678,9 +679,10 @@ export async function handleManagePacksSelect(interaction) {
   if (!interaction.customId.startsWith("admin:packs:")) return false;
 
   if (interaction.customId.startsWith("admin:packs:content_select:")) {
-    const [, , , packId, type] = interaction.customId.split(":");
+    const [, , , type] = interaction.customId.split(":");
     const contentId = interaction.values?.[0];
-    const [pack, row] = await Promise.all([DonatePackRepo.getPackById(packId), DonatePackRepo.getPackContentEntry(type, contentId)]);
+    const row = await DonatePackRepo.getPackContentEntry(type, contentId);
+    const pack = row ? await DonatePackRepo.getPackById(row.pack_id) : null;
     if (!pack || !row) {
       await safeReply(interaction, { content: "❌ ไม่พบรายการที่เลือก", ephemeral: true });
       return true;
@@ -815,7 +817,7 @@ export async function handleManagePacksModal(interaction) {
       const created = await DonatePackRepo.addPackContent(packId, type, fields);
       const pack = await DonatePackRepo.getPackById(packId);
       await logPackAction(interaction, "PACK_CONTENT_ADD", pack?.pack_code || packId, { type, contentId: created.content_id });
-      const rows = await DonatePackRepo.listPackContent(packId, type);
+      const rows = await DonatePackRepo.listPackContent(pack?.pack_id, type);
       await interaction.editReply({ content: `✅ เพิ่ม ${contentTypeLabel(type)} สำเร็จ`, ...buildContentListPayload(pack, type, rows) });
     } catch (err) {
       await interaction.editReply(`❌ เพิ่มของในแพ็กไม่สำเร็จ: ${err.message}`);
@@ -825,11 +827,11 @@ export async function handleManagePacksModal(interaction) {
 
   if (interaction.customId.startsWith("admin:packs:modal_content_edit:")) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const [, , , packId, type, contentId] = interaction.customId.split(":");
+    const [, , , type, contentId] = interaction.customId.split(":");
     try {
       const fields = sanitizeContentFields(type, getModalValues(interaction));
       const updated = await DonatePackRepo.updatePackContent(type, contentId, fields);
-      const pack = await DonatePackRepo.getPackById(packId);
+      const pack = updated ? await DonatePackRepo.getPackById(updated.pack_id) : null;
       await logPackAction(interaction, "PACK_CONTENT_EDIT", pack?.pack_code || packId, { type, contentId });
       await interaction.editReply({ content: `✅ แก้ ${contentTypeLabel(type)} สำเร็จ`, embeds: [contentEntryEmbed(pack, type, updated)], components: contentActionButtons(packId, type, contentId) });
     } catch (err) {
