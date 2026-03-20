@@ -42,13 +42,8 @@ export async function createOrderFromModal(interaction) {
       packName = donatePack?.pack_name ?? code;
     }
 
-    if (type === "BOOST") {
-      amount = Number(BOOSTS[code]?.price ?? 0);
-    }
-
-    if (type === "VIP") {
-      amount = Number(VIP_PACKS[code]?.price ?? 0);
-    }
+    if (type === "BOOST") amount = Number(BOOSTS[code]?.price ?? 0);
+    if (type === "VIP") amount = Number(VIP_PACKS[code]?.price ?? 0);
 
     if (!amount) {
       return safeReply(interaction, {
@@ -61,11 +56,7 @@ export async function createOrderFromModal(interaction) {
     const slug = safeSlugUsername(interaction.user.username);
     const seq = orderNo.split("-").pop();
     const channelName = `donate-${slug}-${seq}`;
-    const ticket = await createTicketChannel(
-      interaction.guild,
-      interaction.user,
-      channelName
-    );
+    const ticket = await createTicketChannel(interaction.guild, interaction.user, channelName);
 
     await OrdersRepo.insert({
       order_no: orderNo,
@@ -90,9 +81,7 @@ export async function createOrderFromModal(interaction) {
 
     const intro = new EmbedBuilder()
       .setTitle(`🎫 Ticket: ${orderNo}`)
-      .setDescription(
-        "กรุณาแนบสลิปในห้องนี้ และถ้าแพ็กมีรถ/เรือ ให้เลือกจากเมนูด้านล่าง"
-      )
+      .setDescription("กรุณาแนบสลิปในห้องนี้ และถ้าแพ็กมีรถ/เรือ ให้เลือกจากเมนูด้านล่าง")
       .addFields(
         {
           name: "ผู้ซื้อ",
@@ -116,7 +105,7 @@ export async function createOrderFromModal(interaction) {
         },
         {
           name: "Note",
-          value: note || "-",
+          value: note ? note : "-",
           inline: false,
         },
         {
@@ -126,8 +115,7 @@ export async function createOrderFromModal(interaction) {
         },
         {
           name: "📌 สำคัญ",
-          value:
-            "ใส่ชื่อให้ตรงกับตัวละครทุกกรณี ถ้าทีมงานตรวจแล้วชื่อไม่ตรง จะให้เปิดเคสใหม่",
+          value: "ใส่ชื่อให้ตรงกับตัวละครทุกกรณี ถ้าทีมงานตรวจแล้วชื่อไม่ตรง จะให้เปิดเคสใหม่",
           inline: false,
         }
       );
@@ -152,17 +140,11 @@ export async function createOrderFromModal(interaction) {
       const options = [];
 
       for (const v of donatePack?.vehicleChoices ?? []) {
-        options.push({
-          label: `CAR: ${v}`,
-          value: `CAR:${v}`,
-        });
+        options.push({ label: `CAR: ${v}`, value: `CAR:${v}` });
       }
 
       for (const b of donatePack?.boatChoices ?? []) {
-        options.push({
-          label: `BOAT: ${b}`,
-          value: `BOAT:${b}`,
-        });
+        options.push({ label: `BOAT: ${b}`, value: `BOAT:${b}` });
       }
 
       if (options.length) {
