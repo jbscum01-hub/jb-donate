@@ -21,6 +21,8 @@ const required = [
 const optional = [
   "ADMIN_DASHBOARD_MESSAGE_ID",
   "SEND_ADMIN_DASHBOARD_ON_START",
+  "PANEL_MESSAGE_ID",
+  "SEND_PANEL_ON_START",
 ];
 
 for (const k of required) {
@@ -38,4 +40,6 @@ export const ENV = {
   ...Object.fromEntries(required.map((k) => [k, process.env[k]])),
   ADMIN_DASHBOARD_MESSAGE_ID: process.env.ADMIN_DASHBOARD_MESSAGE_ID || "",
   SEND_ADMIN_DASHBOARD_ON_START: String(process.env.SEND_ADMIN_DASHBOARD_ON_START || "false").toLowerCase() === "true",
+  PANEL_MESSAGE_ID: process.env.PANEL_MESSAGE_ID || "",
+  SEND_PANEL_ON_START: String(process.env.SEND_PANEL_ON_START || "false").toLowerCase() === "true",
 };

@@ -17,6 +17,7 @@ import { buildShopPanel } from "./panels/shopPanel.js";
 import { isAdmin } from "../domain/permissions.js";
 import { ENV } from "../config/env.js";
 import { runVipTick } from "../jobs/vipRunner.js";
+import { handleManagePacksButton, handleManagePacksModal, handleManagePacksSelect, buildManagePacksMenuPayload } from "./handlers/admin.managePacks.js";
 
 async function getAdminDashboardMessage(client) {
   if (!ENV.ADMIN_DASHBOARD_CHANNEL_ID) throw new Error("Missing ENV.ADMIN_DASHBOARD_CHANNEL_ID");
@@ -43,6 +44,7 @@ export async function routeInteraction(interaction) {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "shop_select") return openOrderModal(interaction);
       if (interaction.customId.startsWith("ticket_model_select:")) return handleTicketVehicleSelect(interaction);
+      if (interaction.customId.startsWith("admin:packs:select:")) return handleManagePacksSelect(interaction);
       return;
     }
 
@@ -50,6 +52,7 @@ export async function routeInteraction(interaction) {
       if (interaction.customId.startsWith("order_create:")) return createOrderFromModal(interaction);
       if (interaction.customId.startsWith("admin_add_insurance_modal:")) return addManualInsuranceFromModal(interaction);
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
+      if (interaction.customId.startsWith("admin:packs:modal_")) return handleManagePacksModal(interaction);
       return;
     }
 
@@ -69,6 +72,25 @@ export async function routeInteraction(interaction) {
           const view = id.split(":")[2] || "dashboard";
           const payload = await buildAdminDashboardMessage(interaction.client, view);
           return interaction.update(payload);
+        }
+
+        if (id === "admin:packs:menu") {
+          return interaction.reply({ ...buildManagePacksMenuPayload(), flags: MessageFlags.Ephemeral });
+        }
+
+        if (
+          id === "admin:packs:add" ||
+          id === "admin:packs:create" ||
+          id === "admin:packs:edit" ||
+          id === "admin:packs:preview" ||
+          id === "admin:packs:toggle" ||
+          id === "admin:packs:delete" ||
+          id === "admin:packs:refresh" ||
+          id.startsWith("admin:packs:view:") ||
+          id.startsWith("admin:packs:edit_field:") ||
+          id.startsWith("admin:packs:add_details:")
+        ) {
+          return handleManagePacksButton(interaction);
         }
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
@@ -98,7 +120,6 @@ export async function routeInteraction(interaction) {
         }
 
         if (
-          id.startsWith("admin:packs:") ||
           id.startsWith("admin:insurance:") ||
           id.startsWith("admin:config:") ||
           id.startsWith("admin:logs:")
