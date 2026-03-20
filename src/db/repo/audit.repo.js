@@ -10,7 +10,7 @@ export const AuditRepo = {
     meta = null,
   }) {
     const sql = `
-      INSERT INTO audit_logs
+      insert into tb_donate_audit_logs
       (
         guild_id,
         actor_id,
@@ -19,8 +19,8 @@ export const AuditRepo = {
         target,
         meta
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id
+      values ($1, $2, $3, $4, $5, $6)
+      returning id
     `;
 
     const values = [
@@ -29,7 +29,7 @@ export const AuditRepo = {
       actorTag,
       action,
       target,
-      meta ? JSON.stringify(meta) : null,
+      meta ?? null,
     ];
 
     const result = await pool.query(sql, values);
