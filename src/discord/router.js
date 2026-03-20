@@ -18,9 +18,20 @@ import { isAdmin } from "../domain/permissions.js";
 import { ENV } from "../config/env.js";
 import { runVipTick } from "../jobs/vipRunner.js";
 
+async function getAdminDashboardMessage(client) {
+  if (!ENV.ADMIN_DASHBOARD_CHANNEL_ID) throw new Error("Missing ENV.ADMIN_DASHBOARD_CHANNEL_ID");
+  const ch = await client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
+  if (!ch) throw new Error("Cannot fetch admin dashboard channel");
+  if (!ENV.ADMIN_DASHBOARD_MESSAGE_ID) throw new Error("Missing ENV.ADMIN_DASHBOARD_MESSAGE_ID");
+  const msg = await ch.messages.fetch(ENV.ADMIN_DASHBOARD_MESSAGE_ID);
+  if (!msg) throw new Error("Cannot fetch admin dashboard message");
+  return msg;
+}
+
 async function rebuildShopPanel(client) {
   if (!ENV.SHOP_CHANNEL_ID) throw new Error("Missing ENV.SHOP_CHANNEL_ID");
   const ch = await client.channels.fetch(ENV.SHOP_CHANNEL_ID);
+  if (!ch) throw new Error("Cannot fetch shop channel");
   const payload = await buildShopPanel();
   const sent = await ch.send(payload);
   await sent.pin().catch(() => {});
@@ -54,12 +65,17 @@ export async function routeInteraction(interaction) {
           return openManualInsuranceModal(interaction);
         }
 
+        if (id.startsWith("admin:nav:")) {
+          const view = id.split(":")[2] || "dashboard";
+          const payload = await buildAdminDashboardMessage(interaction.client, view);
+          return interaction.update(payload);
+        }
+
         await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
         if (id === "admin:refresh") {
-          const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
-          const msg = await ch.messages.fetch(ENV.ADMIN_DASHBOARD_MESSAGE_ID);
-          const payload = await buildAdminDashboardMessage(interaction.client);
+          const msg = await getAdminDashboardMessage(interaction.client);
+          const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
           await msg.edit(payload);
           return interaction.editReply("✅ Refresh Dashboard แล้ว");
         }
@@ -69,61 +85,44 @@ export async function routeInteraction(interaction) {
           return interaction.editReply(`✅ VIP Tick done: due=${r?.due ?? 0}, warn=${r?.warn ?? 0}, expired=${r?.expired ?? 0}`);
         }
 
-        if (id === "admin:health") {
-          return interaction.editReply("🟢 Bot is running / gateway OK");
-        }
-
-        if (id === "admin:show_env") {
-          const safe = [
-            `GUILD_ID=${ENV.GUILD_ID}`,
-            `SHOP_CHANNEL_ID=${ENV.SHOP_CHANNEL_ID}`,
-            `QUEUE_CHANNEL_ID=${ENV.QUEUE_CHANNEL_ID}`,
-            `LOG_CHANNEL_ID=${ENV.LOG_CHANNEL_ID}`,
-            `VIP_LOG_CHANNEL_ID=${ENV.VIP_LOG_CHANNEL_ID}`,
-            `SLIP_ARCHIVE_CHANNEL_ID=${ENV.SLIP_ARCHIVE_CHANNEL_ID}`,
-            `ADMIN_ROLE_ID=${ENV.ADMIN_ROLE_ID}`,
-            `ADMIN_DASHBOARD_CHANNEL_ID=${ENV.ADMIN_DASHBOARD_CHANNEL_ID}`,
-            `ADMIN_DASHBOARD_MESSAGE_ID=${ENV.ADMIN_DASHBOARD_MESSAGE_ID}`,
-            `TICKET_CATEGORY_ID=${ENV.TICKET_CATEGORY_ID}`,
-          ].join("\n");
-          return interaction.editReply("```env\n" + safe + "\n```");
-        }
-
-        if (id === "admin:rebuild_shop") {
+        if (id === "admin:tool:post_shop" || id === "admin:tool:refresh_shop") {
           const sent = await rebuildShopPanel(interaction.client);
-          return interaction.editReply(`✅ ส่ง Shop Panel ใหม่แล้ว\n${sent.url}\n\nℹ️ แนะนำให้ลบ/ปลดหมุด Shop Panel เก่าในห้อง donate-shop เพื่อกันคนกดอันเก่า`);
+          return interaction.editReply(`✅ ส่ง Shop Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.SHOP_CHANNEL_ID}>`);
         }
 
-        if (id === "admin:rebuild_panels") {
-          const sent = await rebuildShopPanel(interaction.client).catch((e) => {
-            throw new Error("Rebuild Shop Panel failed: " + (e?.message || String(e)));
-          });
-
+        if (id === "admin:tool:deploy_admin" || id === "admin:tool:rebuild_admin") {
           const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
-          const msg = await ch.messages.fetch(ENV.ADMIN_DASHBOARD_MESSAGE_ID);
-          const payload = await buildAdminDashboardMessage(interaction.client);
-          await msg.edit(payload);
-
-          return interaction.editReply(`✅ Rebuild Panels เสร็จแล้ว\n- Shop Panel: ${sent.url}\n- Dashboard: refreshed`);
+          const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
+          const sent = await ch.send(payload);
+          return interaction.editReply(`✅ ส่ง Admin Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.ADMIN_DASHBOARD_CHANNEL_ID}>\n\nถ้าจะใช้ข้อความนี้เป็นหลัก ให้เอา ID ไปใส่ ADMIN_DASHBOARD_MESSAGE_ID`);
         }
 
-        return interaction.editReply("⚠️ ไม่รู้จักปุ่มนี้");
+        if (
+          id.startsWith("admin:packs:") ||
+          id.startsWith("admin:insurance:") ||
+          id.startsWith("admin:config:") ||
+          id.startsWith("admin:logs:")
+        ) {
+          return interaction.editReply("🛠️ ปุ่มนี้เปิดโครงไว้แล้ว เพื่อให้เมนูแอดมินครบและไม่กดแล้วพัง ตอนนี้ยังไม่ได้ผูก modal / query viewer เต็ม");
+        }
+
+        return interaction.editReply("ℹ️ Admin action not implemented yet");
       }
 
-      if (id.startsWith("staff_approve:")) return approveOrder(interaction);
-      if (id.startsWith("staff_gen:")) return genCommands(interaction);
-      if (id.startsWith("staff_set_car_plate:")) return setPlate(interaction);
-      if (id.startsWith("staff_set_boat_plate:")) return setPlate(interaction);
-      if (id.startsWith("staff_set_plate:")) return setPlate(interaction);
-      if (id.startsWith("staff_close:")) return closeOrder(interaction);
-      if (id.startsWith("staff_cancel:")) return cancelOrder(interaction);
-      if (id.startsWith("vehiclecard_useins:")) return useInsuranceFromCard(interaction);
-      return;
+      if (id.startsWith("staff:approve:")) return approveOrder(interaction);
+      if (id.startsWith("staff:gen:")) return genCommands(interaction);
+      if (id.startsWith("staff:set_plate:")) return setPlate(interaction);
+      if (id.startsWith("staff:close:")) return closeOrder(interaction);
+      if (id.startsWith("staff:cancel:")) return cancelOrder(interaction);
+
+      if (id.startsWith("use_ins:")) return useInsuranceFromCard(interaction);
     }
-  } catch (err) {
-    console.error("routeInteraction error:", err);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: "❌ มีข้อผิดพลาด (ดู log)", flags: MessageFlags.Ephemeral }).catch(() => {});
+  } catch (e) {
+    console.error("routeInteraction error", e);
+    const content = `❌ Error: ${e?.message || String(e)}`;
+    if (interaction.deferred || interaction.replied) {
+      return interaction.editReply({ content }).catch(() => {});
     }
+    return interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
   }
 }

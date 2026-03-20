@@ -1,11 +1,9 @@
-// src/discord/handlers/admin.addInsurance.js
 import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
   EmbedBuilder,
-  MessageFlags,
 } from "discord.js";
 
 import { isAdmin } from "../../domain/permissions.js";
@@ -24,7 +22,6 @@ function toInt(v) {
 
 function parseUserId(input) {
   const s = String(input || "").trim();
-  // <@123> or <@!123> or raw id
   const m = s.match(/^<@!?([0-9]{17,20})>$/) || s.match(/^([0-9]{17,20})$/);
   return m ? m[1] : null;
 }
@@ -60,253 +57,221 @@ async function refreshVehicleCard(client, plate, kind) {
   return { messageId, payload, insurance, vehicle };
 }
 
-// ===== Button: open modal =====
 export async function openManualInsuranceModal(interaction) {
   try {
+    if (!interaction.isButton()) return;
+    if (!isAdmin(interaction.member)) {
+      return safeReply(interaction, { content: "❌ เฉพาะแอดมินเท่านั้น", ephemeral: true });
+    }
 
-  if (!interaction.isButton()) return;
-  if (!isAdmin(interaction.member)) {
-    return safeReply(interaction, { content: "❌ เฉพาะแอดมินเท่านั้น", ephemeral: true });
-  }
+    const parts = interaction.customId.split(":");
+    const kind = parts[2] === "BOAT" ? "BOAT" : "CAR";
 
-  // customId: admin:add_insurance:CAR|BOAT
-  const parts = interaction.customId.split(":");
-  const kind = parts[2] === "BOAT" ? "BOAT" : "CAR";
+    const modal = new ModalBuilder()
+      .setCustomId(`admin_add_insurance_modal:${kind}`)
+      .setTitle(`Add ${kind} Insurance`);
 
-  const modal = new ModalBuilder()
-    .setCustomId(`admin_add_insurance_modal:${kind}`)
-    .setTitle(`Add ${kind} Insurance`);
+    const player = new TextInputBuilder()
+      .setCustomId("owner")
+      .setLabel("Player (แท็ก @คน หรือใส่ User ID)")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setPlaceholder("เช่น @TableTennis19 หรือ 1465...");
 
-  const plate = new TextInputBuilder()
-    .setCustomId("plate")
-    .setLabel(kind === "BOAT" ? "ทะเบียนเรือ" : "ทะเบียนรถ")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true);
+    const plate = new TextInputBuilder()
+      .setCustomId("plate")
+      .setLabel(kind === "BOAT" ? "ทะเบียนเรือ" : "ทะเบียนรถ")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
 
-  const owner = new TextInputBuilder()
-    .setCustomId("owner")
-    .setLabel("Owner (แท็ก @คน หรือใส่ User ID)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("เช่น @TableTennis19 หรือ 1465...");
+    const model = new TextInputBuilder()
+      .setCustomId("model")
+      .setLabel("Model (รุ่นรถ/เรือ)")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setPlaceholder(kind === "BOAT" ? "เช่น Motorboat" : "เช่น Rager");
 
-  const model = new TextInputBuilder()
-    .setCustomId("model")
-    .setLabel("Model (รุ่นรถ/เรือ)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder(kind === "BOAT" ? "เช่น Motorboat" : "เช่น Rager");
+    const total = new TextInputBuilder()
+      .setCustomId("total")
+      .setLabel("จำนวนครั้ง")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setPlaceholder("เช่น 3");
 
-  const total = new TextInputBuilder()
-    .setCustomId("total")
-    .setLabel("จำนวนครั้ง (ทั้งหมดที่จะเพิ่ม)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("เช่น 5");
+    const days = new TextInputBuilder()
+      .setCustomId("days")
+      .setLabel("จำนวนวัน")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setPlaceholder("เช่น 30");
 
-  const days = new TextInputBuilder()
-    .setCustomId("days")
-    .setLabel("เพิ่มวันหมดอายุ (จำนวนวัน)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("เช่น 30");
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(player),
+      new ActionRowBuilder().addComponents(plate),
+      new ActionRowBuilder().addComponents(model),
+      new ActionRowBuilder().addComponents(total),
+      new ActionRowBuilder().addComponents(days)
+    );
 
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(plate),
-    new ActionRowBuilder().addComponents(owner),
-    new ActionRowBuilder().addComponents(model),
-    new ActionRowBuilder().addComponents(total),
-    new ActionRowBuilder().addComponents(days)
-  );
-
-  // IMPORTANT: do NOT defer/reply before showModal
-  return interaction.showModal(modal);
+    return interaction.showModal(modal);
   } catch (err) {
     console.error("openManualInsuranceModal error:", err);
-    try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
-    } catch {}
     return safeReply(interaction, { content: "❌ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง", ephemeral: true });
   }
 }
 
-// ===== Modal submit: grant insurance =====
 export async function addManualInsuranceFromModal(interaction) {
   try {
+    if (!interaction.isModalSubmit()) return;
+    if (!interaction.customId.startsWith("admin_add_insurance_modal:")) return;
 
-  if (!interaction.isModalSubmit()) return;
-  if (!interaction.customId.startsWith("admin_add_insurance_modal:")) return;
+    if (!isAdmin(interaction.member)) {
+      return safeReply(interaction, { content: "❌ เฉพาะแอดมินเท่านั้น", ephemeral: true });
+    }
 
-  if (!isAdmin(interaction.member)) {
-    return safeReply(interaction, { content: "❌ เฉพาะแอดมินเท่านั้น", ephemeral: true });
-  }
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    }
 
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ ephemeral: true }).catch(() => {});
-  }
+    const kind = interaction.customId.split(":")[1] === "BOAT" ? "BOAT" : "CAR";
+    const plate = interaction.fields.getTextInputValue("plate").trim();
+    const ownerInput = interaction.fields.getTextInputValue("owner").trim();
+    const model = interaction.fields.getTextInputValue("model").trim();
+    const total = toInt(interaction.fields.getTextInputValue("total"));
+    const days = toInt(interaction.fields.getTextInputValue("days"));
 
-  const kind = interaction.customId.split(":")[1] === "BOAT" ? "BOAT" : "CAR";
-  const plate = interaction.fields.getTextInputValue("plate").trim();
-  const ownerInput = interaction.fields.getTextInputValue("owner").trim();
-  const model = interaction.fields.getTextInputValue("model").trim();
-  const total = toInt(interaction.fields.getTextInputValue("total"));
-  const days = toInt(interaction.fields.getTextInputValue("days"));
+    const ownerUserId = parseUserId(ownerInput);
+    if (!ownerUserId) {
+      return safeReply(interaction, {
+        content: "❌ Player ต้องแท็ก @คน หรือใส่ User ID (ตัวเลข 17-20 หลัก)",
+        ephemeral: true,
+      });
+    }
 
-  const ownerUserId = parseUserId(ownerInput);
-  if (!ownerUserId) {
-    return safeReply(interaction, {
-      content: "❌ Owner ต้องแท็ก @คน หรือใส่ User ID (ตัวเลข 17-20 หลัก)",
-      ephemeral: true,
-    });
-  }
+    if (!isPlate6(plate)) {
+      return safeReply(interaction, { content: "❌ กรุณากรอกทะเบียน", ephemeral: true });
+    }
+    if (!model) {
+      return safeReply(interaction, { content: "❌ กรุณากรอก Model (รุ่นรถ/เรือ)", ephemeral: true });
+    }
+    if (!Number.isFinite(total) || total <= 0) {
+      return safeReply(interaction, { content: "❌ จำนวนครั้งต้องเป็นตัวเลขมากกว่า 0", ephemeral: true });
+    }
+    if (!Number.isFinite(days) || days <= 0) {
+      return safeReply(interaction, { content: "❌ จำนวนวันต้องเป็นตัวเลขมากกว่า 0", ephemeral: true });
+    }
 
-  if (!isPlate6(plate)) {
-    return safeReply(interaction, { content: "❌ กรุณากรอกทะเบียน", ephemeral: true });
-  }
-  if (!model) {
-    return safeReply(interaction, { content: "❌ กรุณากรอก Model (รุ่นรถ/เรือ)", ephemeral: true });
-  }
-  if (!Number.isFinite(total) || total <= 0) {
-    return safeReply(interaction, { content: "❌ จำนวนครั้งต้องเป็นตัวเลขมากกว่า 0", ephemeral: true });
-  }
-  if (!Number.isFinite(days) || days <= 0) {
-    return safeReply(interaction, { content: "❌ จำนวนวันต้องเป็นตัวเลขมากกว่า 0", ephemeral: true });
-  }
-
-  let vehicle = await VehiclesRepo.getByPlate(plate);
-
-  // Auto-register vehicle if not found (admin-only flow)
-  if (!vehicle) {
     const ownerMember = await interaction.guild.members.fetch(ownerUserId).catch(() => null);
     if (!ownerMember) {
       return safeReply(interaction, {
-        content: "❌ ไม่พบ Owner ในเซิร์ฟเวอร์นี้ (ลองแท็ก @คน หรือใส่ User ID ที่ถูกต้อง)",
+        content: "❌ ไม่พบ Player ในเซิร์ฟเวอร์นี้ (ลองแท็ก @คน หรือใส่ User ID ที่ถูกต้อง)",
         ephemeral: true,
       });
     }
 
     const ownerTag = ownerMember.user?.tag || `${ownerMember.user?.username ?? "unknown"}`;
 
-    vehicle = await VehiclesRepo.upsert({
-      guildId: interaction.guildId,
+    let vehicle = await VehiclesRepo.getByPlate(plate);
+
+    if (!vehicle) {
+      vehicle = await VehiclesRepo.upsert({
+        guild_id: interaction.guildId,
+        plate,
+        kind,
+        model,
+        owner_user_id: ownerUserId,
+        owner_tag: ownerTag,
+        order_no: null,
+        registered_by: interaction.user.id,
+      });
+
+      await AuditRepo.add({
+        guildId: interaction.guildId,
+        actorId: interaction.user.id,
+        actorTag: interaction.user.tag ?? interaction.user.username,
+        action: "VEHICLE_AUTO_REGISTER",
+        target: plate,
+        meta: { kind, model, owner_user_id: ownerUserId, owner_tag: ownerTag },
+      });
+    }
+
+    if (vehicle.kind !== kind) {
+      return safeReply(interaction, {
+        content: `❌ ทะเบียน ${plate} เป็นชนิด ${vehicle.kind} แต่คุณกำลังเพิ่ม ${kind}`,
+        ephemeral: true,
+      });
+    }
+
+    const vehicleAfterOwner = await VehiclesRepo.upsert({
+      guild_id: interaction.guildId,
       plate,
       kind,
       model,
       owner_user_id: ownerUserId,
       owner_tag: ownerTag,
-      order_no: null,
-      registered_by: interaction.user.id,
+      order_no: vehicle.order_no ?? null,
+      registered_by: vehicle.registered_by ?? interaction.user.id,
     });
 
-    // best-effort audit
+    const ins = await InsuranceRepo.upsertInsurance({
+      plate,
+      kind,
+      add_total: total,
+      days,
+      order_no: vehicleAfterOwner.order_no ?? null,
+      source: "MANUAL",
+    });
+
+    await InsuranceRepo.log({
+      guild_id: interaction.guildId,
+      plate,
+      kind,
+      action: "GRANT",
+      delta: total,
+      order_no: vehicleAfterOwner.order_no ?? null,
+      user_id: vehicleAfterOwner.owner_user_id,
+      staff_id: interaction.user.id,
+      note: "manual grant",
+    });
+
+    const refreshed = await refreshVehicleCard(interaction.client, plate, kind);
+
     await AuditRepo.add({
       guildId: interaction.guildId,
       actorId: interaction.user.id,
-      actorTag: interaction.user.tag,
-      action: "VEHICLE_AUTO_REGISTER",
+      actorTag: interaction.user.tag ?? interaction.user.username,
+      action: "INSURANCE_MANUAL_GRANT",
       target: plate,
-      meta: { kind, model, owner_user_id: ownerUserId, owner_tag: ownerTag },
+      meta: { kind, model, add_total: total, days, vehicle_card_message_id: refreshed?.messageId ?? null },
     });
-  }
 
-  if (vehicle.kind !== kind) {
-    return safeReply(interaction, {
-      content: `❌ ทะเบียน ${plate} เป็นชนิด ${vehicle.kind} แต่คุณกำลังเพิ่ม ${kind}`,
-      ephemeral: true,
-    });
-  }
-
-  // Set / overwrite owner + model on vehicles so Vehicle Card can show it
-  const ownerMember = await interaction.guild.members.fetch(ownerUserId).catch(() => null);
-  if (!ownerMember) {
-    return safeReply(interaction, {
-      content: "❌ ไม่พบ Owner ในเซิร์ฟเวอร์นี้ (ลองแท็ก @คน หรือใส่ User ID ที่ถูกต้อง)",
-      ephemeral: true,
-    });
-  }
-
-  const ownerTag = ownerMember.user?.tag || `${ownerMember.user?.username ?? "unknown"}`;
-  const vehicleAfterOwner = await VehiclesRepo.upsert({
-    guildId: interaction.guildId,
-    plate,
-    kind,
-    model,
-    owner_user_id: ownerUserId,
-    owner_tag: ownerTag,
-    order_no: vehicle.order_no ?? null,
-    registered_by: vehicle.registered_by ?? interaction.user.id,
-  });
-
-  // Upsert (accumulate total + extend expiry)
-  const ins = await InsuranceRepo.upsertInsurance({
-    plate,
-    kind,
-    add_total: total,
-    days,
-    order_no: vehicleAfterOwner.order_no ?? null,
-    source: "MANUAL",
-  });
-
-  await InsuranceRepo.log({
-    guildId: interaction.guildId,
-    plate,
-    kind,
-    action: "GRANT",
-    delta: total,
-    order_no: vehicleAfterOwner.order_no ?? null,
-    user_id: vehicleAfterOwner.owner_user_id,
-    staff_id: interaction.user.id,
-    note: "manual grant",
-  });
-
-  const refreshed = await refreshVehicleCard(interaction.client, plate, kind);
-
-  await AuditRepo.add({
-    guildId: interaction.guildId,
-    actorId: interaction.user.id,
-    actorTag: interaction.user.tag,
-    action: "INSURANCE_MANUAL_GRANT",
-    target: plate,
-    meta: { kind, model, add_total: total, days, vehicle_card_message_id: refreshed?.messageId ?? null },
-  });
-
-  // Send log (best effort) with donate-like format
-  try {
-    const logCh = await interaction.client.channels.fetch(IDS.LOG_CHANNEL_ID).catch(() => null);
-    if (logCh) {
-      const remain = Math.max(0, (ins.total ?? 0) - (ins.used ?? 0));
-      const exp = ins.expire_at
-        ? `<t:${Math.floor(new Date(ins.expire_at).getTime() / 1000)}:f>`
-        : "-";
-      const logEmbed = new EmbedBuilder()
-        .setTitle("✅ MANUAL INSURANCE GRANTED")
-        .addFields(
-          { name: "ทะเบียน", value: plate, inline: true },
-          { name: "Kind", value: kind, inline: true },
-          { name: "Model", value: model, inline: true },
-          { name: "Owner", value: `<@${vehicleAfterOwner.owner_user_id}> (${vehicleAfterOwner.owner_tag})`, inline: false },
-          { name: "Insurance", value: `เหลือ **${remain}** / ทั้งหมด **${ins.total}**`, inline: false },
-          { name: "Expire", value: exp, inline: true },
-          { name: "Added", value: `+${total} ครั้ง, +${days} วัน`, inline: true },
-          { name: "By", value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: false },
-        );
-      await logCh.send({ embeds: [logEmbed] }).catch(() => {});
-    }
-  } catch {}
-
-  return safeReply(interaction, {
-    content: `✅ เพิ่มประกัน ${kind} ให้ทะเบียน ${plate} แล้ว (+${total} ครั้ง / +${days} วัน)\n📌 Vehicle Card: <#${IDS.VEHICLE_PLATE_LOG_CHANNEL_ID}>`,
-    ephemeral: true,
-  });
-  } catch (err) {
-    console.error("addManualInsuranceFromModal error:", err);
     try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
+      const logCh = await interaction.client.channels.fetch(IDS.LOG_CHANNEL_ID).catch(() => null);
+      if (logCh) {
+        const remain = Math.max(0, (ins.total ?? 0) - (ins.used ?? 0));
+        const exp = ins.expire_at ? `<t:${Math.floor(new Date(ins.expire_at).getTime() / 1000)}:f>` : "-";
+        const logEmbed = new EmbedBuilder()
+          .setTitle("✅ MANUAL INSURANCE GRANTED")
+          .addFields(
+            { name: "ทะเบียน", value: plate, inline: true },
+            { name: "Kind", value: kind, inline: true },
+            { name: "Model", value: model, inline: true },
+            { name: "Owner", value: `<@${vehicleAfterOwner.owner_user_id}> (${vehicleAfterOwner.owner_tag})`, inline: false },
+            { name: "Insurance", value: `เหลือ **${remain}** / ทั้งหมด **${ins.total}**`, inline: false },
+            { name: "Expire", value: exp, inline: true },
+            { name: "Added", value: `+${total} ครั้ง, +${days} วัน`, inline: true },
+            { name: "By", value: `<@${interaction.user.id}> (${interaction.user.tag ?? interaction.user.username})`, inline: false },
+          );
+        await logCh.send({ embeds: [logEmbed] }).catch(() => {});
       }
     } catch {}
+
+    return safeReply(interaction, {
+      content: `✅ เพิ่มประกัน ${kind} ให้ทะเบียน ${plate} แล้ว (+${total} ครั้ง / +${days} วัน)\n📌 Vehicle Card: <#${IDS.VEHICLE_PLATE_LOG_CHANNEL_ID}>`,
+      ephemeral: true,
+    });
+  } catch (err) {
+    console.error("addManualInsuranceFromModal error:", err);
     return safeReply(interaction, { content: "❌ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง", ephemeral: true });
   }
 }

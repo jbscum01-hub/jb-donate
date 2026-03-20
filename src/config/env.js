@@ -31,13 +31,11 @@ for (const k of required) {
 
 for (const k of optional) {
   const v = process.env[k];
-  if (typeof v === "string") {
-    process.env[k] = v.trim();
-  }
+  if (typeof v === "string") process.env[k] = v.trim();
 }
 
 export const ENV = {
   ...Object.fromEntries(required.map((k) => [k, process.env[k]])),
   ADMIN_DASHBOARD_MESSAGE_ID: process.env.ADMIN_DASHBOARD_MESSAGE_ID || "",
-  SEND_ADMIN_DASHBOARD_ON_START: process.env.SEND_ADMIN_DASHBOARD_ON_START || "false",
+  SEND_ADMIN_DASHBOARD_ON_START: String(process.env.SEND_ADMIN_DASHBOARD_ON_START || "false").toLowerCase() === "true",
 };

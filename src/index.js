@@ -56,14 +56,14 @@ async function ensureAdminDashboardMessage(client) {
     return null;
   }
 
-  const payload = await buildAdminDashboardMessage(client);
+  const payload = await buildAdminDashboardMessage(client, "dashboard");
   const existingId = ENV.ADMIN_DASHBOARD_MESSAGE_ID;
 
   if (existingId) {
     const msg = await channel.messages.fetch(existingId).catch(() => null);
     if (msg) {
-      await msg.edit(payload).catch(() => {});
-      console.log("✅ Admin dashboard message exists:", msg.id);
+      await msg.edit(payload).catch((e) => console.error("edit admin dashboard failed:", e));
+      console.log("✅ Admin dashboard message updated:", msg.id);
       return msg.id;
     }
     console.warn("⚠️ ADMIN_DASHBOARD_MESSAGE_ID not found, will create a new one:", existingId);
@@ -79,7 +79,7 @@ client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log(`Shop Channel: ${IDS.SHOP_CHANNEL_ID}`);
 
-  if (ENV.SEND_ADMIN_DASHBOARD_ON_START === "true") {
+  if (ENV.SEND_ADMIN_DASHBOARD_ON_START || ENV.ADMIN_DASHBOARD_MESSAGE_ID) {
     await ensureAdminDashboardMessage(client);
   }
 
@@ -110,7 +110,6 @@ async function loginWithRetry() {
       console.error("❌ Discord login failed:", e);
       const waitMs = Math.min(10 * 60_000, 30_000 * Math.pow(2, Math.min(attempt, 5)));
       console.warn(`⏳ Will retry login in ${Math.round(waitMs / 1000)}s... (${msg})`);
-
       loginInFlight = false;
       await new Promise((r) => setTimeout(r, waitMs));
       loginInFlight = true;
