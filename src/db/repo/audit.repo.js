@@ -1,10 +1,40 @@
-import { pool } from "../pool.js";
-import { SQL } from "../queries.js";
+const db = require('../queries');
 
-export const AuditRepo = {
-  async add(a) {
-    await pool.query(SQL.insertAudit, [
-      a.guild_id, a.actor_id ?? null, a.actor_tag ?? null, a.action, a.target ?? null, a.meta ?? null
-    ]);
-  }
+async function add({
+  guildId,
+  actorId = null,
+  actorTag = null,
+  action,
+  target = null,
+  meta = null,
+}) {
+  const sql = `
+    INSERT INTO audit_logs
+    (
+      guild_id,
+      actor_id,
+      actor_tag,
+      action,
+      target,
+      meta
+    )
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING id
+  `;
+
+  const values = [
+    guildId,
+    actorId,
+    actorTag,
+    action,
+    target,
+    meta ? JSON.stringify(meta) : null,
+  ];
+
+  const result = await db.query(sql, values);
+  return result.rows[0];
+}
+
+module.exports = {
+  add,
 };
