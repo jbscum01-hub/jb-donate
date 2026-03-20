@@ -87,9 +87,9 @@ export async function genTemplate(interaction) {
   await logCh.send(await buildTemplate(order));
 
   await AuditRepo.add({
-    guildId: interaction.guildId,
-    actorId: interaction.user.id,
-    actorTag: interaction.user.tag,
+    guild_id: interaction.guildId,
+    actor_id: interaction.user.id,
+    actor_tag: interaction.user.tag,
     action: "ORDER_GEN",
     target: orderNo,
     meta: { selected_vehicle: order.selected_vehicle, selected_boat: order.selected_boat },

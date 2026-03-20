@@ -68,7 +68,7 @@ export async function closeOrder(interaction) {
       });
 
       await InsuranceRepo.log({
-        guildId: interaction.guildId,
+        guild_id: interaction.guildId,
         plate: order.car_plate,
         kind: "CAR",
         action: "GRANT",
@@ -93,7 +93,7 @@ export async function closeOrder(interaction) {
       });
 
       await InsuranceRepo.log({
-        guildId: interaction.guildId,
+        guild_id: interaction.guildId,
         plate: order.boat_plate,
         kind: "BOAT",
         action: "GRANT",
@@ -136,7 +136,7 @@ export async function closeOrder(interaction) {
       });
 
       await InsuranceRepo.log({
-        guildId: interaction.guildId,
+        guild_id: interaction.guildId,
         plate: order.car_plate,
         kind: "CAR",
         action: "GRANT",
@@ -186,9 +186,9 @@ export async function closeOrder(interaction) {
   await OrdersRepo.setStatus(orderNo, "SUCCESS", interaction.user.id);
 
   await AuditRepo.add({
-    guildId: interaction.guildId,
-    actorId: interaction.user.id,
-    actorTag: interaction.user.tag,
+    guild_id: interaction.guildId,
+    actor_id: interaction.user.id,
+    actor_tag: interaction.user.tag,
     action: "ORDER_CLOSE_SUCCESS",
     target: orderNo,
     meta: {

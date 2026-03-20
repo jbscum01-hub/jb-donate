@@ -67,7 +67,7 @@ export async function createOrderFromModal(interaction) {
 
     const intro = new EmbedBuilder()
       .setTitle(`🎫 Ticket: ${orderNo}`)
-      .setDescription("กรุณาแนบสลิปในห้องนี้ และเลือก model (ถ้ามี) จากเมนูด้านล่าง")
+      .setDescription("กรุณาแนบสลิปในห้องนี้ และเลือก รถ / เรือ จากเมนูด้านล่างถ้าแพ็กที่ซื้อรองรับ")
       .addFields(
         { name: "ผู้ซื้อ", value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: false },
         { name: "แพ็ก", value: `${type}:${packName} (${amount}฿)`, inline: true },
@@ -75,6 +75,7 @@ export async function createOrderFromModal(interaction) {
         { name: "SteamID", value: steam, inline: true },
         { name: "Note", value: note ? note : "-", inline: false },
         { name: "Status", value: "PENDING", inline: true },
+        { name: "แจ้งเตือน", value: "ใส่ชื่อตัวละครให้ตรงทุกกรณี หากชื่อไม่ตรงจะให้เปิดเคสใหม่", inline: false },
       );
 
     if (type === "DONATE") {
