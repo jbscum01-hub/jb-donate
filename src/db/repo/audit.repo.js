@@ -1,6 +1,6 @@
-const db = require('../queries');
+import db from "../queries.js";
 
-const AuditRepo = {
+export const AuditRepo = {
   async add({
     guildId,
     actorId = null,
@@ -11,8 +11,15 @@ const AuditRepo = {
   }) {
     const sql = `
       INSERT INTO audit_logs
-      (guild_id, actor_id, actor_tag, action, target, meta)
-      VALUES ($1,$2,$3,$4,$5,$6)
+      (
+        guild_id,
+        actor_id,
+        actor_tag,
+        action,
+        target,
+        meta
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
     `;
 
@@ -27,9 +34,5 @@ const AuditRepo = {
 
     const result = await db.query(sql, values);
     return result.rows[0];
-  }
-};
-
-module.exports = {
-  AuditRepo
+  },
 };
