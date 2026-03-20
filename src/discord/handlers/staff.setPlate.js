@@ -85,7 +85,7 @@ export async function setPlate(interaction) {
 
   // Upsert vehicle registry
   const v = await VehiclesRepo.upsert({
-    guild_id: interaction.guildId,
+    guildId: interaction.guildId,
     plate,
     kind,
     model,
@@ -125,9 +125,9 @@ export async function setPlate(interaction) {
   }
 
   await AuditRepo.add({
-    guild_id: interaction.guildId,
-    actor_id: interaction.user.id,
-    actor_tag: interaction.user.tag,
+    guildId: interaction.guildId,
+    actorId: interaction.user.id,
+    actorTag: interaction.user.tag,
     action: "SET_PLATE",
     target: plate,
     meta: { order_no: orderNo, kind, model, vehicle_card_message_id: messageId },

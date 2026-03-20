@@ -28,7 +28,7 @@ export async function useInsuranceFromCard(interaction) {
   }
 
   await InsuranceRepo.log({
-    guild_id: interaction.guildId,
+    guildId: interaction.guildId,
     plate, kind,
     action: "USE",
     delta: -1,
@@ -52,9 +52,9 @@ export async function useInsuranceFromCard(interaction) {
   await interaction.message.edit(payload).catch(()=>{});
 
   await AuditRepo.add({
-    guild_id: interaction.guildId,
-    actor_id: interaction.user.id,
-    actor_tag: interaction.user.tag,
+    guildId: interaction.guildId,
+    actorId: interaction.user.id,
+    actorTag: interaction.user.tag,
     action: "INSURANCE_USE",
     target: plate,
     meta: { kind },
