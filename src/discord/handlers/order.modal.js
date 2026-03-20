@@ -1,4 +1,9 @@
-import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags } from "discord.js";
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  MessageFlags,
+} from "discord.js";
 import { BOOSTS, VIP_PACKS } from "../../domain/catalog.js";
 import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
 import { isSteamId17, safeSlugUsername } from "../../domain/validators.js";
@@ -21,7 +26,10 @@ export async function createOrderFromModal(interaction) {
     const note = (interaction.fields.getTextInputValue("note") || "").trim();
 
     if (!isSteamId17(steam)) {
-      return safeReply(interaction, { content: "❌ SteamID ต้องเป็นเลข 17 หลักเท่านั้น", ephemeral: true });
+      return safeReply(interaction, {
+        content: "❌ SteamID ต้องเป็นเลข 17 หลักเท่านั้น",
+        ephemeral: true,
+      });
     }
 
     let amount = 0;
@@ -33,16 +41,31 @@ export async function createOrderFromModal(interaction) {
       amount = Number(donatePack?.price ?? 0);
       packName = donatePack?.pack_name ?? code;
     }
-    if (type === "BOOST") amount = Number(BOOSTS[code]?.price ?? 0);
-    if (type === "VIP") amount = Number(VIP_PACKS[code]?.price ?? 0);
 
-    if (!amount) return safeReply(interaction, { content: "❌ ไม่พบแพ็กที่เลือก", ephemeral: true });
+    if (type === "BOOST") {
+      amount = Number(BOOSTS[code]?.price ?? 0);
+    }
+
+    if (type === "VIP") {
+      amount = Number(VIP_PACKS[code]?.price ?? 0);
+    }
+
+    if (!amount) {
+      return safeReply(interaction, {
+        content: "❌ ไม่พบแพ็กที่เลือก",
+        ephemeral: true,
+      });
+    }
 
     const orderNo = await nextOrderNo("JB");
     const slug = safeSlugUsername(interaction.user.username);
     const seq = orderNo.split("-").pop();
     const channelName = `donate-${slug}-${seq}`;
-    const ticket = await createTicketChannel(interaction.guild, interaction.user, channelName);
+    const ticket = await createTicketChannel(
+      interaction.guild,
+      interaction.user,
+      channelName
+    );
 
     await OrdersRepo.insert({
       order_no: orderNo,
@@ -67,41 +90,87 @@ export async function createOrderFromModal(interaction) {
 
     const intro = new EmbedBuilder()
       .setTitle(`🎫 Ticket: ${orderNo}`)
-      .setDescription("กรุณาแนบสลิปในห้องนี้ และถ้าแพ็กมีรถ/เรือ ให้เลือกจากเมนูด้านล่าง")
+      .setDescription(
+        "กรุณาแนบสลิปในห้องนี้ และถ้าแพ็กมีรถ/เรือ ให้เลือกจากเมนูด้านล่าง"
+      )
       .addFields(
-        { name: "ผู้ซื้อ", value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: false },
-        { name: "แพ็ก", value: `${type}:${packName} (${amount}฿)`, inline: true },
-        { name: "IGN", value: ign, inline: true },
-        { name: "SteamID", value: steam, inline: true },
-        { name: "Note", value: note ? note : "-", inline: false },
-        { name: "Status", value: "PENDING", inline: true },
+        {
+          name: "ผู้ซื้อ",
+          value: `<@${interaction.user.id}> (${interaction.user.tag})`,
+          inline: false,
+        },
+        {
+          name: "แพ็ก",
+          value: `${type}:${packName} (${amount}฿)`,
+          inline: true,
+        },
+        {
+          name: "IGN",
+          value: ign,
+          inline: true,
+        },
+        {
+          name: "SteamID",
+          value: steam,
+          inline: true,
+        },
+        {
+          name: "Note",
+          value: note || "-",
+          inline: false,
+        },
+        {
+          name: "Status",
+          value: "PENDING",
+          inline: true,
+        },
         {
           name: "📌 สำคัญ",
-          value: "ใส่ชื่อให้ตรงกับตัวละครทุกกรณี ถ้าทีมงานตรวจแล้วชื่อไม่ตรง จะให้เปิดเคสใหม่",
+          value:
+            "ใส่ชื่อให้ตรงกับตัวละครทุกกรณี ถ้าทีมงานตรวจแล้วชื่อไม่ตรง จะให้เปิดเคสใหม่",
           inline: false,
         }
       );
 
     if (type === "DONATE") {
       const bullets = donatePack?.benefits?.length
-        ? donatePack.benefits.map((x) => `• ${x}`).join("
-")
-        : (donatePack?.displayItems ?? []).map((x) => `• ${x}`).join("
-");
-      if (bullets) intro.addFields({ name: "สิทธิ์ที่ได้รับ", value: bullets.slice(0, 1024), inline: false });
+        ? donatePack.benefits.map((x) => `• ${x}`).join("\n")
+        : (donatePack?.displayItems ?? []).map((x) => `• ${x}`).join("\n");
+
+      if (bullets) {
+        intro.addFields({
+          name: "สิทธิ์ที่ได้รับ",
+          value: bullets.slice(0, 1024),
+          inline: false,
+        });
+      }
     }
 
     const components = [];
+
     if (type === "DONATE") {
       const options = [];
-      for (const v of donatePack?.vehicleChoices ?? []) options.push({ label: `CAR: ${v}`, value: `CAR:${v}` });
-      for (const b of donatePack?.boatChoices ?? []) options.push({ label: `BOAT: ${b}`, value: `BOAT:${b}` });
+
+      for (const v of donatePack?.vehicleChoices ?? []) {
+        options.push({
+          label: `CAR: ${v}`,
+          value: `CAR:${v}`,
+        });
+      }
+
+      for (const b of donatePack?.boatChoices ?? []) {
+        options.push({
+          label: `BOAT: ${b}`,
+          value: `BOAT:${b}`,
+        });
+      }
 
       if (options.length) {
         const select = new StringSelectMenuBuilder()
           .setCustomId(`ticket_model_select:${orderNo}`)
           .setPlaceholder("เลือก model รถ/เรือ (ถ้ามี)")
           .addOptions(options.slice(0, 25));
+
         components.push(new ActionRowBuilder().addComponents(select));
       }
     }
@@ -120,6 +189,9 @@ export async function createOrderFromModal(interaction) {
     });
   } catch (err) {
     console.error("createOrderFromModal error:", err);
-    return safeReply(interaction, { content: "❌ สร้างออเดอร์ไม่สำเร็จ (ดู log)", ephemeral: true });
+    return safeReply(interaction, {
+      content: "❌ สร้างออเดอร์ไม่สำเร็จ (ดู log)",
+      ephemeral: true,
+    });
   }
 }
