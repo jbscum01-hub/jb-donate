@@ -446,7 +446,15 @@ export async function handleManagePacksButton(interaction) {
   }
 
   if (id.startsWith("admin:packs:edit_field:")) {
-    const [, , , , packId, field] = id.split(":");
+    const parts = id.split(":");
+    const packId = parts[4];
+    const field = parts[5];
+
+    if (!packId || !field) {
+      await safeReply(interaction, { content: "❌ รหัสการแก้ไข pack ไม่ถูกต้อง", ephemeral: true });
+      return true;
+    }
+
     const pack = await DonatePackRepo.getPackById(packId);
     if (!pack) {
       await safeReply(interaction, { content: "❌ ไม่พบ pack ที่เลือก", ephemeral: true });
