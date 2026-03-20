@@ -665,7 +665,7 @@ export async function handleManagePacksButton(interaction) {
     const currentRow = await DonatePackRepo.getPackContentEntry(type, contentId);
     const pack = currentRow ? await DonatePackRepo.getPackById(currentRow.pack_id) : null;
     await DonatePackRepo.softDeletePackContent(type, contentId);
-    await logPackAction(interaction, "PACK_CONTENT_DELETE", pack?.pack_code || packId, { type, contentId });
+    await logPackAction(interaction, "PACK_CONTENT_DELETE", pack?.pack_code || currentRow?.pack_id || null, { type, contentId });
     const rows = await DonatePackRepo.listPackContent(pack?.pack_id, type);
     await interaction.update({ content: `✅ ลบ ${contentTypeLabel(type)} แล้ว`, ...buildContentListPayload(pack, type, rows) });
     return true;
@@ -687,7 +687,7 @@ export async function handleManagePacksSelect(interaction) {
       await safeReply(interaction, { content: "❌ ไม่พบรายการที่เลือก", ephemeral: true });
       return true;
     }
-    await interaction.update({ content: `กำลังแก้ ${contentTypeLabel(type)} ของ **${pack.pack_name}**`, embeds: [contentEntryEmbed(pack, type, row)], components: contentActionButtons(packId, type, contentId) });
+    await interaction.update({ content: `กำลังแก้ ${contentTypeLabel(type)} ของ **${pack.pack_name}**`, embeds: [contentEntryEmbed(pack, type, row)], components: contentActionButtons(pack.pack_id, type, contentId) });
     return true;
   }
 
@@ -832,8 +832,8 @@ export async function handleManagePacksModal(interaction) {
       const fields = sanitizeContentFields(type, getModalValues(interaction));
       const updated = await DonatePackRepo.updatePackContent(type, contentId, fields);
       const pack = updated ? await DonatePackRepo.getPackById(updated.pack_id) : null;
-      await logPackAction(interaction, "PACK_CONTENT_EDIT", pack?.pack_code || packId, { type, contentId });
-      await interaction.editReply({ content: `✅ แก้ ${contentTypeLabel(type)} สำเร็จ`, embeds: [contentEntryEmbed(pack, type, updated)], components: contentActionButtons(packId, type, contentId) });
+      await logPackAction(interaction, "PACK_CONTENT_EDIT", pack?.pack_code || updated?.pack_id || null, { type, contentId });
+      await interaction.editReply({ content: `✅ แก้ ${contentTypeLabel(type)} สำเร็จ`, embeds: [contentEntryEmbed(pack, type, updated)], components: contentActionButtons(pack?.pack_id, type, contentId) });
     } catch (err) {
       await interaction.editReply(`❌ แก้ของในแพ็กไม่สำเร็จ: ${err.message}`);
     }
