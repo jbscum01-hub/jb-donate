@@ -17,7 +17,12 @@ import { buildShopPanel } from "./panels/shopPanel.js";
 import { isAdmin } from "../domain/permissions.js";
 import { ENV } from "../config/env.js";
 import { runVipTick } from "../jobs/vipRunner.js";
-import { handleManagePacksButton, handleManagePacksModal, handleManagePacksSelect, buildManagePacksMenuPayload } from "./handlers/admin.managePacks.js";
+import {
+  handleManagePacksButton,
+  handleManagePacksModal,
+  handleManagePacksSelect,
+  buildManagePacksMenuPayload,
+} from "./handlers/admin.managePacks.js";
 
 async function getAdminDashboardMessage(client) {
   if (!ENV.ADMIN_DASHBOARD_CHANNEL_ID) throw new Error("Missing ENV.ADMIN_DASHBOARD_CHANNEL_ID");
@@ -61,7 +66,10 @@ export async function routeInteraction(interaction) {
 
       if (id.startsWith("admin:")) {
         if (!isAdmin(interaction.member)) {
-          return interaction.reply({ content: "❌ เฉพาะแอดมินเท่านั้น", flags: MessageFlags.Ephemeral });
+          return interaction.reply({
+            content: "❌ เฉพาะแอดมินเท่านั้น",
+            flags: MessageFlags.Ephemeral,
+          });
         }
 
         if (id.startsWith("admin:add_insurance:")) {
@@ -75,7 +83,10 @@ export async function routeInteraction(interaction) {
         }
 
         if (id === "admin:packs:menu") {
-          return interaction.reply({ ...buildManagePacksMenuPayload(), flags: MessageFlags.Ephemeral });
+          return interaction.reply({
+            ...buildManagePacksMenuPayload(),
+            flags: MessageFlags.Ephemeral,
+          });
         }
 
         if (
@@ -110,19 +121,25 @@ export async function routeInteraction(interaction) {
 
         if (id === "admin:vip_tick") {
           const r = await runVipTick(interaction.client);
-          return interaction.editReply(`✅ VIP Tick done: due=${r?.due ?? 0}, warn=${r?.warn ?? 0}, expired=${r?.expired ?? 0}`);
+          return interaction.editReply(
+            `✅ VIP Tick done: due=${r?.due ?? 0}, warn=${r?.warn ?? 0}, expired=${r?.expired ?? 0}`
+          );
         }
 
         if (id === "admin:tool:post_shop" || id === "admin:tool:refresh_shop") {
           const sent = await rebuildShopPanel(interaction.client);
-          return interaction.editReply(`✅ ส่ง Shop Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.SHOP_CHANNEL_ID}>`);
+          return interaction.editReply(
+            `✅ ส่ง Shop Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.SHOP_CHANNEL_ID}>`
+          );
         }
 
         if (id === "admin:tool:deploy_admin" || id === "admin:tool:rebuild_admin") {
           const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
           const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
           const sent = await ch.send(payload);
-          return interaction.editReply(`✅ ส่ง Admin Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.ADMIN_DASHBOARD_CHANNEL_ID}>\n\nถ้าจะใช้ข้อความนี้เป็นหลัก ให้เอา ID ไปใส่ ADMIN_DASHBOARD_MESSAGE_ID`);
+          return interaction.editReply(
+            `✅ ส่ง Admin Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.ADMIN_DASHBOARD_CHANNEL_ID}>\n\nถ้าจะใช้ข้อความนี้เป็นหลัก ให้เอา ID ไปใส่ ADMIN_DASHBOARD_MESSAGE_ID`
+          );
         }
 
         if (
@@ -130,7 +147,9 @@ export async function routeInteraction(interaction) {
           id.startsWith("admin:config:") ||
           id.startsWith("admin:logs:")
         ) {
-          return interaction.editReply("🛠️ ปุ่มนี้เปิดโครงไว้แล้ว เพื่อให้เมนูแอดมินครบและไม่กดแล้วพัง ตอนนี้ยังไม่ได้ผูก modal / query viewer เต็ม");
+          return interaction.editReply(
+            "🛠️ ปุ่มนี้เปิดโครงไว้แล้ว เพื่อให้เมนูแอดมินครบและไม่กดแล้วพัง ตอนนี้ยังไม่ได้ผูก modal / query viewer เต็ม"
+          );
         }
 
         return interaction.editReply("ℹ️ Admin action not implemented yet");
@@ -142,6 +161,8 @@ export async function routeInteraction(interaction) {
       if (id.startsWith("staff:close:")) return closeOrder(interaction);
       if (id.startsWith("staff:cancel:")) return cancelOrder(interaction);
 
+      // รองรับทั้ง customId เดิม และ customId ของ Vehicle Card ปัจจุบัน
+      if (id.startsWith("vehiclecard_useins:")) return useInsuranceFromCard(interaction);
       if (id.startsWith("use_ins:")) return useInsuranceFromCard(interaction);
     }
   } catch (e) {
