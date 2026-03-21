@@ -650,7 +650,7 @@ export async function handleManagePacksButton(interaction) {
   }
 
   if (id.startsWith("admin:packs:content_edit:")) {
-    const [, , , packId, type, contentId] = id.split(":");
+    const [, , , type, contentId] = id.split(":");
     const row = await DonatePackRepo.getPackContentEntry(type, contentId);
     if (!row) {
       await safeReply(interaction, { content: "❌ ไม่พบรายการ", ephemeral: true });

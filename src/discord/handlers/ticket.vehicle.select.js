@@ -1,3 +1,4 @@
+import { MessageFlags } from "discord.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
 import { safeReply } from "../utils/messages.js";
@@ -11,8 +12,16 @@ async function requirements(order) {
 }
 
 export async function handleTicketVehicleSelect(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+  }
+
   const orderNo = interaction.customId.split(":")[1];
-  const [kind, model] = interaction.values[0].split(":");
+  const [kind, model] = String(interaction.values?.[0] || "").split(":");
+
+  if (!kind || !model) {
+    return safeReply(interaction, { content: "❌ ค่า model ไม่ถูกต้อง", ephemeral: true });
+  }
 
   const order = await OrdersRepo.getByNo(orderNo);
   if (!order) return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
@@ -37,7 +46,6 @@ export async function handleTicketVehicleSelect(interaction) {
   if (req.requireCar && !v) lines.push("⚠️ ยังไม่ได้เลือกรถ (CAR) กรุณาเลือกให้ครบ");
   if (req.requireBoat && !b) lines.push("⚠️ ยังไม่ได้เลือกเรือ (BOAT) กรุณาเลือกให้ครบ");
 
-  return interaction.reply({ content: lines.join("\n") }).catch(() => {
-    return safeReply(interaction, { content: `✅ เลือกแล้ว: ${kind} = ${model}`, ephemeral: true });
-  });
+  return safeReply(interaction, { content: lines.join("
+"), ephemeral: true });
 }
