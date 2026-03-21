@@ -1,3 +1,4 @@
+// src/discord/panels/staffPanel.js
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 export function buildStaffPanel(orderNo) {

@@ -17,6 +17,7 @@ import { buildShopPanel } from "./panels/shopPanel.js";
 import { isAdmin } from "../domain/permissions.js";
 import { ENV } from "../config/env.js";
 import { runVipTick } from "../jobs/vipRunner.js";
+import { isStaffActionId } from "./utils/customId.js";
 
 async function getAdminDashboardMessage(client) {
   if (!ENV.ADMIN_DASHBOARD_CHANNEL_ID) throw new Error("Missing ENV.ADMIN_DASHBOARD_CHANNEL_ID");
@@ -94,9 +95,9 @@ export async function routeInteraction(interaction) {
           return interaction.editReply(`✅ VIP Tick done: due=${r?.due ?? 0}, warn=${r?.warn ?? 0}, expired=${r?.expired ?? 0}`);
         }
 
-        if (id === "admin:tool:post_shop" || id === "admin:tool:refresh_shop" || id === "admin:packs:refresh") {
+        if (id === "admin:tool:post_shop" || id === "admin:tool:refresh_shop") {
           const sent = await rebuildShopPanel(interaction.client);
-          return interaction.editReply(`✅ อัปเดต Shop Panel แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.SHOP_CHANNEL_ID}>`);
+          return interaction.editReply(`✅ ส่ง Shop Panel แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.SHOP_CHANNEL_ID}>`);
         }
 
         if (id === "admin:tool:deploy_admin" || id === "admin:tool:rebuild_admin") {
@@ -112,17 +113,17 @@ export async function routeInteraction(interaction) {
           id.startsWith("admin:config:") ||
           id.startsWith("admin:logs:")
         ) {
-          return interaction.editReply("🛠️ เมนูนี้ยังไม่ถูกเปิดใช้เต็มระบบในเวอร์ชันนี้ แต่ปุ่มจะไม่ทำให้บอทพัง");
+          return interaction.editReply("🛠️ ปุ่มนี้เปิดโครงไว้แล้ว เพื่อให้เมนูแอดมินครบและไม่กดแล้วพัง ตอนนี้ยังไม่ได้ผูก modal / query viewer เต็ม");
         }
 
         return interaction.editReply("ℹ️ Admin action not implemented yet");
       }
 
-      if (id.startsWith("staff:approve:") || id.startsWith("staff_approve:")) return approveOrder(interaction);
-      if (id.startsWith("staff:gen:") || id.startsWith("staff_gen:")) return genCommands(interaction);
+      if (isStaffActionId(id, "approve")) return approveOrder(interaction);
+      if (isStaffActionId(id, "gen")) return genCommands(interaction);
       if (id.startsWith("staff:set_plate:") || id.startsWith("staff_set_car_plate:") || id.startsWith("staff_set_boat_plate:")) return setPlate(interaction);
-      if (id.startsWith("staff:close:") || id.startsWith("staff_close:")) return closeOrder(interaction);
-      if (id.startsWith("staff:cancel:") || id.startsWith("staff_cancel:")) return cancelOrder(interaction);
+      if (isStaffActionId(id, "close")) return closeOrder(interaction);
+      if (isStaffActionId(id, "cancel")) return cancelOrder(interaction);
 
       if (id.startsWith("vehiclecard_useins:") || id.startsWith("use_ins:")) return useInsuranceFromCard(interaction);
     }

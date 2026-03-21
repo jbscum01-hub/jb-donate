@@ -6,13 +6,7 @@ import { IDS } from "../../config/constants.js";
 import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
 import { BOOSTS, VIP_PACKS } from "../../domain/catalog.js";
 import { safeReply } from "../utils/messages.js";
-
-function parseOrderNo(customId) {
-  const parts = String(customId || "").split(":");
-  if (parts[0] === "staff" && parts.length >= 3) return parts[2];
-  const legacy = String(customId || "").match(/^staff_gen:(.+)$/);
-  return legacy?.[1] ?? null;
-}
+import { extractOrderNoFromCustomId } from "../utils/customId.js";
 
 async function buildTemplate(order) {
   const lines = [];
@@ -58,7 +52,7 @@ async function buildTemplate(order) {
   if (order.type === "BOOST") {
     const b = BOOSTS[order.pack_code];
     lines.push("BOOST EFFECTS:");
-    for (const e of (b?.effects ?? [])) lines.push(`- ${e}`);
+    for (const e of b?.effects ?? []) lines.push(`- ${e}`);
   }
 
   if (order.type === "VIP") {
@@ -75,46 +69,35 @@ async function buildTemplate(order) {
 }
 
 export async function genTemplate(interaction) {
-  try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    }
-
-    if (!isAdmin(interaction.member)) {
-      return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
-    }
-
-    const orderNo = parseOrderNo(interaction.customId);
-    if (!orderNo) return safeReply(interaction, { content: "❌ รูปแบบคำสั่งไม่ถูกต้อง", ephemeral: true });
-
-    const order = await OrdersRepo.getByNo(orderNo);
-    if (!order) return safeReply(interaction, { content: `❌ ไม่พบ Order: ${orderNo}`, ephemeral: true });
-
-    if (order.status !== "APPROVED") {
-      return safeReply(interaction, { content: "❌ ต้อง APPROVE ก่อนจึงจะ GEN ได้", ephemeral: true });
-    }
-
-    const logCh = await interaction.client.channels.fetch(IDS.LOG_CHANNEL_ID).catch(() => null);
-    if (!logCh) {
-      return safeReply(interaction, { content: "❌ ไม่พบห้อง LOG_CHANNEL_ID", ephemeral: true });
-    }
-
-    await logCh.send(await buildTemplate(order));
-
-    await AuditRepo.add({
-      guildId: interaction.guildId,
-      actorId: interaction.user.id,
-      actorTag: interaction.user.tag,
-      action: "ORDER_GEN",
-      target: orderNo,
-      meta: { selected_vehicle: order.selected_vehicle, selected_boat: order.selected_boat },
-    });
-
-    return safeReply(interaction, { content: `✅ GEN sent to log for ${orderNo}`, ephemeral: true });
-  } catch (error) {
-    console.error("genCommands error", error);
-    return safeReply(interaction, { content: `❌ GEN ไม่สำเร็จ: ${error?.message || String(error)}`, ephemeral: true }).catch(() => {});
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   }
+
+  if (!isAdmin(interaction.member)) {
+    return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
+  }
+  const orderNo = extractOrderNoFromCustomId(interaction.customId);
+  if (!orderNo) return safeReply(interaction, { content: "❌ ไม่พบเลข Order", ephemeral: true });
+  const order = await OrdersRepo.getByNo(orderNo);
+  if (!order) return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
+
+  if (order.status !== "APPROVED") {
+    return safeReply(interaction, { content: "❌ ต้อง APPROVE ก่อนจึงจะ GEN ได้", ephemeral: true });
+  }
+
+  const logCh = await interaction.client.channels.fetch(IDS.LOG_CHANNEL_ID);
+  await logCh.send(await buildTemplate(order));
+
+  await AuditRepo.add({
+    guildId: interaction.guildId,
+    actorId: interaction.user.id,
+    actorTag: interaction.user.tag,
+    action: "ORDER_GEN",
+    target: orderNo,
+    meta: { selected_vehicle: order.selected_vehicle, selected_boat: order.selected_boat },
+  });
+
+  return safeReply(interaction, { content: `✅ GEN sent to log for ${orderNo}`, ephemeral: true });
 }
 
 export async function genCommands(interaction) {
