@@ -7,83 +7,76 @@ async function requirements(order) {
     return { requireCar: false, requireBoat: false };
   }
 
-  const p = await DonatePackRepo.getPackDetails(order.pack_code);
-  const requireCar = (p?.vehicleChoices?.length ?? 0) > 0;
-  const requireBoat = (p?.boatChoices?.length ?? 0) > 0;
-
-  return { requireCar, requireBoat };
+  const pack = await DonatePackRepo.getPackDetails(order.pack_code);
+  return {
+    requireCar: (pack?.vehicleChoices?.length ?? 0) > 0,
+    requireBoat: (pack?.boatChoices?.length ?? 0) > 0,
+  };
 }
 
 export async function handleTicketVehicleSelect(interaction) {
   try {
-    await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral: true }).catch(() => {});
+    }
 
     const orderNo = interaction.customId.split(":")[1];
     const rawValue = interaction.values?.[0];
 
     if (!orderNo) {
-      return safeReply(interaction, {
-        content: "❌ ไม่พบเลข Order",
-      });
+      return safeReply(interaction, { content: "❌ ไม่พบเลข Order", ephemeral: true });
     }
 
     if (!rawValue || !rawValue.includes(":")) {
-      return safeReply(interaction, {
-        content: "❌ ข้อมูล model ที่เลือกไม่ถูกต้อง",
-      });
+      return safeReply(interaction, { content: "❌ ข้อมูล model ที่เลือกไม่ถูกต้อง", ephemeral: true });
     }
 
-    const [kind, model] = rawValue.split(":");
+    const [kind, ...modelParts] = rawValue.split(":");
+    const model = modelParts.join(":").trim();
 
     if (!kind || !model) {
-      return safeReply(interaction, {
-        content: "❌ ข้อมูล model ที่เลือกไม่ครบ",
-      });
+      return safeReply(interaction, { content: "❌ ข้อมูล model ที่เลือกไม่ครบ", ephemeral: true });
     }
 
     const order = await OrdersRepo.getByNo(orderNo);
     if (!order) {
-      return safeReply(interaction, {
-        content: "❌ ไม่พบ Order",
-      });
+      return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
     }
 
     if (order.status !== "PENDING") {
       return safeReply(interaction, {
         content: "❌ เปลี่ยน model ได้เฉพาะก่อน APPROVE เท่านั้น",
+        ephemeral: true,
       });
     }
 
-    let selectedVehicle = order.selected_vehicle;
-    let selectedBoat = order.selected_boat;
-
-    if (kind === "CAR") selectedVehicle = model;
-    if (kind === "BOAT") selectedBoat = model;
+    const selectedVehicle = kind === "CAR" ? model : order.selected_vehicle;
+    const selectedBoat = kind === "BOAT" ? model : order.selected_boat;
 
     await OrdersRepo.setSelection(orderNo, selectedVehicle, selectedBoat);
 
-    const lines = [];
-    lines.push(`✅ **เลือก Model แล้ว** (Order **${orderNo}**)`);
-    lines.push(`- ${kind}: **${model}**`);
+    const lines = [
+      `✅ **เลือก Model แล้ว** (Order **${orderNo}**)`,
+      `- ${kind}: **${model}**`,
+    ];
 
     const req = await requirements(order);
-
     if (req.requireCar && !selectedVehicle) {
       lines.push("⚠️ ยังไม่ได้เลือกรถ (CAR) กรุณาเลือกให้ครบ");
     }
-
     if (req.requireBoat && !selectedBoat) {
       lines.push("⚠️ ยังไม่ได้เลือกเรือ (BOAT) กรุณาเลือกให้ครบ");
     }
 
     return safeReply(interaction, {
       content: lines.join("\n"),
+      ephemeral: true,
     });
   } catch (error) {
     console.error("handleTicketVehicleSelect error", error);
-
     return safeReply(interaction, {
       content: `❌ เลือก model ไม่สำเร็จ: ${error?.message || String(error)}`,
+      ephemeral: true,
     }).catch(() => {});
   }
 }
