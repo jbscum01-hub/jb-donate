@@ -9,20 +9,21 @@ import { buildVehicleCard } from "../panels/vehicleCard.js";
 import { safeReply } from "../utils/messages.js";
 
 function pickKindFromButton(customId) {
-  if (customId.startsWith("staff_set_car_plate:") || customId.startsWith("staff:set_plate:CAR:")) return "CAR";
-  if (customId.startsWith("staff_set_boat_plate:") || customId.startsWith("staff:set_plate:BOAT:")) return "BOAT";
+  if (customId.startsWith("staff_set_car_plate:")) return "CAR";
+  if (customId.startsWith("staff_set_boat_plate:")) return "BOAT";
+  if (customId.startsWith("staff:set_plate:CAR:")) return "CAR";
+  if (customId.startsWith("staff:set_plate:BOAT:")) return "BOAT";
   return null;
 }
 
-function pickOrderNoFromButton(customId) {
+function parseOrderNoFromButton(customId) {
+  const parts = String(customId || "").split(":");
   if (customId.startsWith("staff_set_car_plate:") || customId.startsWith("staff_set_boat_plate:")) {
-    return customId.split(":")[1] || null;
+    return parts[1] ?? null;
   }
-
-  if (customId.startsWith("staff:set_plate:")) {
-    return customId.split(":")[3] || null;
+  if (parts[0] === "staff" && parts[1] === "set_plate" && parts.length >= 4) {
+    return parts[3];
   }
-
   return null;
 }
 
@@ -33,9 +34,8 @@ export async function setPlate(interaction) {
         return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
       }
 
-      const orderNo = pickOrderNoFromButton(interaction.customId);
+      const orderNo = parseOrderNoFromButton(interaction.customId);
       const kind = pickKindFromButton(interaction.customId) ?? "CAR";
-
       if (!orderNo) {
         return safeReply(interaction, { content: "❌ ไม่พบเลข Order", ephemeral: true });
       }
@@ -65,12 +65,11 @@ export async function setPlate(interaction) {
     const parts = interaction.customId.split(":");
     const kind = parts[1] === "BOAT" ? "BOAT" : "CAR";
     const orderNo = parts[2];
-    const plate = interaction.fields.getTextInputValue("plate").trim();
-
     if (!orderNo) {
       return safeReply(interaction, { content: "❌ ไม่พบเลข Order", ephemeral: true });
     }
 
+    const plate = interaction.fields.getTextInputValue("plate").trim();
     if (!plate) {
       return safeReply(interaction, {
         content: "⚠️ ยังไม่ได้ตั้งทะเบียน (สามารถตั้งทีหลังได้)",
@@ -79,27 +78,21 @@ export async function setPlate(interaction) {
     }
 
     const order = await OrdersRepo.getByNo(orderNo);
-    if (!order) {
-      return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
-    }
+    if (!order) return safeReply(interaction, { content: `❌ ไม่พบ Order: ${orderNo}`, ephemeral: true });
 
-    const model =
-      kind === "BOAT"
-        ? order.selected_boat ?? order.boat_model ?? "Unknown"
-        : order.selected_vehicle ?? order.vehicle_model ?? "Unknown";
+    const model = kind === "BOAT"
+      ? order.selected_boat ?? order.boat_model ?? "Unknown"
+      : order.selected_vehicle ?? order.vehicle_model ?? "Unknown";
 
     const existing = await VehiclesRepo.getByPlate(plate);
     if (existing && existing.owner_user_id && existing.owner_user_id !== order.user_id) {
       return safeReply(interaction, { content: `❌ ทะเบียน ${plate} ถูกใช้งานแล้ว`, ephemeral: true });
     }
 
-    if (kind === "BOAT") {
-      await OrdersRepo.setBoatPlate(orderNo, plate, interaction.user.id);
-    } else {
-      await OrdersRepo.setCarPlate(orderNo, plate, interaction.user.id);
-    }
+    if (kind === "BOAT") await OrdersRepo.setBoatPlate(orderNo, plate, interaction.user.id);
+    else await OrdersRepo.setCarPlate(orderNo, plate, interaction.user.id);
 
-    const vehicle = await VehiclesRepo.upsert({
+    const v = await VehiclesRepo.upsert({
       guild_id: interaction.guildId,
       plate,
       kind,
@@ -110,19 +103,22 @@ export async function setPlate(interaction) {
       registered_by: interaction.user.id,
     });
 
-    const insurance = await InsuranceRepo.getInsurance(plate, kind);
+    const ins = await InsuranceRepo.getInsurance(plate, kind);
     const payload = buildVehicleCard({
       plate,
       kind,
       model,
       ownerUserId: order.user_id,
       ownerTag: order.user_tag,
-      insurance,
+      insurance: ins,
     });
 
-    const plateLogCh = await interaction.client.channels.fetch(IDS.VEHICLE_PLATE_LOG_CHANNEL_ID);
+    const plateLogCh = await interaction.client.channels.fetch(IDS.VEHICLE_PLATE_LOG_CHANNEL_ID).catch(() => null);
+    if (!plateLogCh) {
+      return safeReply(interaction, { content: `✅ บันทึกทะเบียน ${plate} (${kind}) แล้ว แต่ไม่พบห้อง VEHICLE_PLATE_LOG_CHANNEL_ID`, ephemeral: true });
+    }
 
-    let messageId = vehicle.plate_card_message_id;
+    let messageId = v.plate_card_message_id;
     if (messageId) {
       const msg = await plateLogCh.messages.fetch(messageId).catch(() => null);
       if (msg) {
@@ -158,9 +154,6 @@ export async function setPlate(interaction) {
         await interaction.deferReply({ ephemeral: true });
       }
     } catch {}
-    return safeReply(interaction, {
-      content: `❌ เกิดข้อผิดพลาด: ${err?.message || String(err)}`,
-      ephemeral: true,
-    });
+    return safeReply(interaction, { content: `❌ ตั้งทะเบียนไม่สำเร็จ: ${err?.message || String(err)}`, ephemeral: true });
   }
 }

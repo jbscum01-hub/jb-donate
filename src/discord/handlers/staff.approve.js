@@ -9,6 +9,13 @@ import { safeReply } from "../utils/messages.js";
 import { ENV } from "../../config/env.js";
 import { IDS } from "../../config/constants.js";
 
+function parseOrderNo(customId) {
+  const parts = String(customId || "").split(":");
+  if (parts[0] === "staff" && parts.length >= 3) return parts[2];
+  const legacy = String(customId || "").match(/^staff_approve:(.+)$/);
+  return legacy?.[1] ?? null;
+}
+
 async function missingSelections(order) {
   if (order.type !== "DONATE") return [];
   const p = await DonatePackRepo.getPackDetails(order.pack_code);
@@ -22,35 +29,38 @@ async function missingSelections(order) {
 }
 
 export async function approveOrder(interaction) {
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  }
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    }
 
-  if (!isAdmin(interaction.member)) {
-    return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
-  }
-  const orderNo = interaction.customId.split(":")[1];
-  const order = await OrdersRepo.getByNo(orderNo);
-  if (!order) return safeReply(interaction, { content: "❌ ไม่พบ Order", ephemeral: true });
+    if (!isAdmin(interaction.member)) {
+      return safeReply(interaction, { content: "❌ สำหรับทีมงานเท่านั้น", ephemeral: true });
+    }
 
-  if (order.status !== "PENDING") {
-    return safeReply(interaction, { content: `ℹ️ สถานะปัจจุบัน: ${order.status}`, ephemeral: true });
-  }
+    const orderNo = parseOrderNo(interaction.customId);
+    if (!orderNo) return safeReply(interaction, { content: "❌ รูปแบบคำสั่งไม่ถูกต้อง", ephemeral: true });
 
-  const missing = await missingSelections(order);
-  if (missing.length) {
-    const msg = [
-      "❌ ยังเลือก Model ไม่ครบ จึงยัง APPROVE ไม่ได้",
-      `ต้องเลือก: ${missing.join(" + ")}`,
-      "ให้ผู้ซื้อเลือกจากเมนูใน Ticket ให้ครบก่อนนะ",
-    ].join("\n");
-    return safeReply(interaction, { content: msg, ephemeral: true });
-  }
+    const order = await OrdersRepo.getByNo(orderNo);
+    if (!order) return safeReply(interaction, { content: `❌ ไม่พบ Order: ${orderNo}`, ephemeral: true });
 
-  const updated = await OrdersRepo.setStatus(orderNo, "APPROVED", interaction.user.id);
+    if (order.status !== "PENDING") {
+      return safeReply(interaction, { content: `ℹ️ สถานะปัจจุบัน: ${order.status}`, ephemeral: true });
+    }
 
-  if (order.type === "VIP") {
-    try {
+    const missing = await missingSelections(order);
+    if (missing.length) {
+      const msg = [
+        "❌ ยังเลือก Model ไม่ครบ จึงยัง APPROVE ไม่ได้",
+        `ต้องเลือก: ${missing.join(" + ")}`,
+        "ให้ผู้ซื้อเลือกจากเมนูใน Ticket ให้ครบก่อนนะ",
+      ].join("\n");
+      return safeReply(interaction, { content: msg, ephemeral: true });
+    }
+
+    await OrdersRepo.setStatus(orderNo, "APPROVED", interaction.user.id);
+
+    if (order.type === "VIP") {
       const vip = VIP_PACKS[order.pack_code];
       if (!vip) {
         return safeReply(interaction, { content: "❌ เปิดใช้งาน VIP ไม่สำเร็จ: ไม่พบ VIP PACK", ephemeral: true });
@@ -92,22 +102,22 @@ export async function approveOrder(interaction) {
           )
           .setFooter({ text: `Order: ${order.order_no} | Approved by ${interaction.user.tag}` });
 
-        await ch.send({ embeds: [embed] });
+        await ch.send({ embeds: [embed] }).catch(() => {});
       }
-    } catch (e) {
-      console.error("VIP activate error:", e);
-      return safeReply(interaction, { content: `❌ เปิดใช้งาน VIP ไม่สำเร็จ: ${e?.message || e}`, ephemeral: true });
     }
+
+    await AuditRepo.add({
+      guildId: interaction.guildId,
+      actorId: interaction.user.id,
+      actorTag: interaction.user.tag,
+      action: "ORDER_APPROVE",
+      target: orderNo,
+      meta: { type: order.type, pack_code: order.pack_code },
+    });
+
+    return safeReply(interaction, { content: `✅ APPROVED: ${orderNo}`, ephemeral: true });
+  } catch (error) {
+    console.error("approveOrder error", error);
+    return safeReply(interaction, { content: `❌ อนุมัติไม่สำเร็จ: ${error?.message || String(error)}`, ephemeral: true }).catch(() => {});
   }
-
-  await AuditRepo.add({
-    guildId: interaction.guildId,
-    actorId: interaction.user.id,
-    actorTag: interaction.user.tag,
-    action: "ORDER_APPROVE",
-    target: orderNo,
-    meta: { from: order.status, to: updated.status },
-  });
-
-  return safeReply(interaction, { content: `✅ APPROVED: ${orderNo}`, ephemeral: true });
 }

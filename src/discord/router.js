@@ -17,12 +17,6 @@ import { buildShopPanel } from "./panels/shopPanel.js";
 import { isAdmin } from "../domain/permissions.js";
 import { ENV } from "../config/env.js";
 import { runVipTick } from "../jobs/vipRunner.js";
-import {
-  handleManagePacksButton,
-  handleManagePacksModal,
-  handleManagePacksSelect,
-  buildManagePacksMenuPayload,
-} from "./handlers/admin.managePacks.js";
 
 async function getAdminDashboardMessage(client) {
   if (!ENV.ADMIN_DASHBOARD_CHANNEL_ID) throw new Error("Missing ENV.ADMIN_DASHBOARD_CHANNEL_ID");
@@ -39,37 +33,18 @@ async function rebuildShopPanel(client) {
   const ch = await client.channels.fetch(ENV.SHOP_CHANNEL_ID);
   if (!ch) throw new Error("Cannot fetch shop channel");
   const payload = await buildShopPanel();
+
+  if (ENV.PANEL_MESSAGE_ID) {
+    const oldMsg = await ch.messages.fetch(ENV.PANEL_MESSAGE_ID).catch(() => null);
+    if (oldMsg) {
+      await oldMsg.edit(payload);
+      return oldMsg;
+    }
+  }
+
   const sent = await ch.send(payload);
   await sent.pin().catch(() => {});
   return sent;
-}
-
-function isStaffApproveId(id) {
-  return id.startsWith("staff:approve:") || id.startsWith("staff_approve:");
-}
-
-function isStaffGenId(id) {
-  return id.startsWith("staff:gen:") || id.startsWith("staff_gen:");
-}
-
-function isStaffCloseId(id) {
-  return id.startsWith("staff:close:") || id.startsWith("staff_close:");
-}
-
-function isStaffCancelId(id) {
-  return id.startsWith("staff:cancel:") || id.startsWith("staff_cancel:");
-}
-
-function isStaffSetPlateId(id) {
-  return (
-    id.startsWith("staff:set_plate:") ||
-    id.startsWith("staff_set_car_plate:") ||
-    id.startsWith("staff_set_boat_plate:")
-  );
-}
-
-function isVehicleInsuranceId(id) {
-  return id.startsWith("vehiclecard_useins:") || id.startsWith("use_ins:");
 }
 
 export async function routeInteraction(interaction) {
@@ -77,7 +52,6 @@ export async function routeInteraction(interaction) {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "shop_select") return openOrderModal(interaction);
       if (interaction.customId.startsWith("ticket_model_select:")) return handleTicketVehicleSelect(interaction);
-      if (interaction.customId.startsWith("admin:packs:")) return handleManagePacksSelect(interaction);
       return;
     }
 
@@ -85,109 +59,73 @@ export async function routeInteraction(interaction) {
       if (interaction.customId.startsWith("order_create:")) return createOrderFromModal(interaction);
       if (interaction.customId.startsWith("admin_add_insurance_modal:")) return addManualInsuranceFromModal(interaction);
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
-      if (interaction.customId.startsWith("admin:packs:modal_")) return handleManagePacksModal(interaction);
       return;
     }
 
-    if (!interaction.isButton()) {
-      return;
+    if (interaction.isButton()) {
+      const id = interaction.customId;
+
+      if (id.startsWith("admin:")) {
+        if (!isAdmin(interaction.member)) {
+          return interaction.reply({ content: "❌ เฉพาะแอดมินเท่านั้น", flags: MessageFlags.Ephemeral });
+        }
+
+        if (id.startsWith("admin:add_insurance:")) {
+          return openManualInsuranceModal(interaction);
+        }
+
+        if (id.startsWith("admin:nav:")) {
+          const view = id.split(":")[2] || "dashboard";
+          const payload = await buildAdminDashboardMessage(interaction.client, view);
+          return interaction.update(payload);
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
+        if (id === "admin:refresh") {
+          const msg = await getAdminDashboardMessage(interaction.client);
+          const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
+          await msg.edit(payload);
+          return interaction.editReply("✅ Refresh Dashboard แล้ว");
+        }
+
+        if (id === "admin:vip_tick") {
+          const r = await runVipTick(interaction.client);
+          return interaction.editReply(`✅ VIP Tick done: due=${r?.due ?? 0}, warn=${r?.warn ?? 0}, expired=${r?.expired ?? 0}`);
+        }
+
+        if (id === "admin:tool:post_shop" || id === "admin:tool:refresh_shop" || id === "admin:packs:refresh") {
+          const sent = await rebuildShopPanel(interaction.client);
+          return interaction.editReply(`✅ อัปเดต Shop Panel แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.SHOP_CHANNEL_ID}>`);
+        }
+
+        if (id === "admin:tool:deploy_admin" || id === "admin:tool:rebuild_admin") {
+          const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
+          const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
+          const sent = await ch.send(payload);
+          return interaction.editReply(`✅ ส่ง Admin Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.ADMIN_DASHBOARD_CHANNEL_ID}>\n\nถ้าจะใช้ข้อความนี้เป็นหลัก ให้เอา ID ไปใส่ ADMIN_DASHBOARD_MESSAGE_ID`);
+        }
+
+        if (
+          id.startsWith("admin:packs:") ||
+          id.startsWith("admin:insurance:") ||
+          id.startsWith("admin:config:") ||
+          id.startsWith("admin:logs:")
+        ) {
+          return interaction.editReply("🛠️ เมนูนี้ยังไม่ถูกเปิดใช้เต็มระบบในเวอร์ชันนี้ แต่ปุ่มจะไม่ทำให้บอทพัง");
+        }
+
+        return interaction.editReply("ℹ️ Admin action not implemented yet");
+      }
+
+      if (id.startsWith("staff:approve:") || id.startsWith("staff_approve:")) return approveOrder(interaction);
+      if (id.startsWith("staff:gen:") || id.startsWith("staff_gen:")) return genCommands(interaction);
+      if (id.startsWith("staff:set_plate:") || id.startsWith("staff_set_car_plate:") || id.startsWith("staff_set_boat_plate:")) return setPlate(interaction);
+      if (id.startsWith("staff:close:") || id.startsWith("staff_close:")) return closeOrder(interaction);
+      if (id.startsWith("staff:cancel:") || id.startsWith("staff_cancel:")) return cancelOrder(interaction);
+
+      if (id.startsWith("vehiclecard_useins:") || id.startsWith("use_ins:")) return useInsuranceFromCard(interaction);
     }
-
-    const id = interaction.customId;
-
-    if (id.startsWith("admin:")) {
-      if (!isAdmin(interaction.member)) {
-        return interaction.reply({
-          content: "❌ เฉพาะแอดมินเท่านั้น",
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      if (id.startsWith("admin:add_insurance:")) {
-        return openManualInsuranceModal(interaction);
-      }
-
-      if (id.startsWith("admin:nav:")) {
-        const view = id.split(":")[2] || "dashboard";
-        const payload = await buildAdminDashboardMessage(interaction.client, view);
-        return interaction.update(payload);
-      }
-
-      if (id === "admin:packs:menu") {
-        return interaction.reply({
-          ...buildManagePacksMenuPayload(),
-          flags: MessageFlags.Ephemeral,
-        });
-      }
-
-      if (
-        id === "admin:packs:add" ||
-        id === "admin:packs:create" ||
-        id === "admin:packs:edit" ||
-        id === "admin:packs:preview" ||
-        id === "admin:packs:toggle" ||
-        id === "admin:packs:delete" ||
-        id === "admin:packs:refresh" ||
-        id.startsWith("admin:packs:view:") ||
-        id.startsWith("admin:packs:edit_field:") ||
-        id.startsWith("admin:packs:add_details:") ||
-        id.startsWith("admin:packs:content:") ||
-        id.startsWith("admin:packs:back_to_edit:") ||
-        id.startsWith("admin:packs:content_list:") ||
-        id.startsWith("admin:packs:content_add:") ||
-        id.startsWith("admin:packs:content_edit:") ||
-        id.startsWith("admin:packs:content_delete:")
-      ) {
-        return handleManagePacksButton(interaction);
-      }
-
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-
-      if (id === "admin:refresh") {
-        const msg = await getAdminDashboardMessage(interaction.client);
-        const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
-        await msg.edit(payload);
-        return interaction.editReply("✅ Refresh Dashboard แล้ว");
-      }
-
-      if (id === "admin:vip_tick") {
-        const r = await runVipTick(interaction.client);
-        return interaction.editReply(
-          `✅ VIP Tick done: due=${r?.due ?? 0}, warn=${r?.warn ?? 0}, expired=${r?.expired ?? 0}`
-        );
-      }
-
-      if (id === "admin:tool:post_shop" || id === "admin:tool:refresh_shop") {
-        const sent = await rebuildShopPanel(interaction.client);
-        return interaction.editReply(
-          `✅ ส่ง Shop Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.SHOP_CHANNEL_ID}>`
-        );
-      }
-
-      if (id === "admin:tool:deploy_admin" || id === "admin:tool:rebuild_admin") {
-        const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
-        const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
-        const sent = await ch.send(payload);
-        return interaction.editReply(
-          `✅ ส่ง Admin Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.ADMIN_DASHBOARD_CHANNEL_ID}>\n\nถ้าจะใช้ข้อความนี้เป็นหลัก ให้เอา ID ไปใส่ ADMIN_DASHBOARD_MESSAGE_ID`
-        );
-      }
-
-      if (id.startsWith("admin:insurance:") || id.startsWith("admin:config:") || id.startsWith("admin:logs:")) {
-        return interaction.editReply(
-          "🛠️ ปุ่มนี้เปิดโครงไว้แล้ว เพื่อให้เมนูแอดมินครบและไม่กดแล้วพัง ตอนนี้ยังไม่ได้ผูก modal / query viewer เต็ม"
-        );
-      }
-
-      return interaction.editReply("ℹ️ Admin action not implemented yet");
-    }
-
-    if (isStaffApproveId(id)) return approveOrder(interaction);
-    if (isStaffGenId(id)) return genCommands(interaction);
-    if (isStaffSetPlateId(id)) return setPlate(interaction);
-    if (isStaffCloseId(id)) return closeOrder(interaction);
-    if (isStaffCancelId(id)) return cancelOrder(interaction);
-    if (isVehicleInsuranceId(id)) return useInsuranceFromCard(interaction);
   } catch (e) {
     console.error("routeInteraction error", e);
     const content = `❌ Error: ${e?.message || String(e)}`;

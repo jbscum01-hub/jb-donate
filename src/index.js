@@ -12,7 +12,6 @@ import { ENV } from "./config/env.js";
 import { IDS } from "./config/constants.js";
 import { runVipTick } from "./jobs/vipRunner.js";
 import { buildAdminDashboardMessage } from "./discord/panels/adminDashboard.js";
-import { buildShopPanel } from "./discord/panels/shopPanel.js";
 
 const client = createClient();
 
@@ -42,40 +41,6 @@ async function vipTickSafe() {
   } finally {
     vipRunning = false;
   }
-}
-
-
-async function ensureShopPanelMessage(client) {
-  const channelId = ENV.SHOP_CHANNEL_ID;
-  if (!channelId) {
-    console.warn("⚠️ SHOP_CHANNEL_ID is not set");
-    return null;
-  }
-
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel) {
-    console.error("❌ Cannot fetch shop channel:", channelId);
-    return null;
-  }
-
-  const payload = await buildShopPanel();
-  const existingId = ENV.PANEL_MESSAGE_ID;
-
-  if (existingId) {
-    const msg = await channel.messages.fetch(existingId).catch(() => null);
-    if (msg) {
-      await msg.edit(payload).catch((e) => console.error("edit shop panel failed:", e));
-      console.log("✅ Shop panel message updated:", msg.id);
-      return msg.id;
-    }
-    console.warn("⚠️ PANEL_MESSAGE_ID not found, will create a new one:", existingId);
-  }
-
-  const created = await channel.send(payload);
-  await created.pin().catch(() => {});
-  console.log("✅ Shop panel message created:", created.id);
-  console.log("➡️ Copy this value to Railway ENV: PANEL_MESSAGE_ID =", created.id);
-  return created.id;
 }
 
 async function ensureAdminDashboardMessage(client) {
@@ -113,10 +78,6 @@ async function ensureAdminDashboardMessage(client) {
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log(`Shop Channel: ${IDS.SHOP_CHANNEL_ID}`);
-
-  if (ENV.SEND_PANEL_ON_START || ENV.PANEL_MESSAGE_ID) {
-    await ensureShopPanelMessage(client);
-  }
 
   if (ENV.SEND_ADMIN_DASHBOARD_ON_START || ENV.ADMIN_DASHBOARD_MESSAGE_ID) {
     await ensureAdminDashboardMessage(client);
