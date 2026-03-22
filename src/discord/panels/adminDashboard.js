@@ -9,6 +9,7 @@ import { ENV } from "../../config/env.js";
 import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VipRepo } from "../../db/repo/vip.repo.js";
 import { InsuranceRepo } from "../../db/repo/insurance.repo.js";
+import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
 
 function nowTH() {
   return new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });

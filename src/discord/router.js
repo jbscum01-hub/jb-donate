@@ -11,6 +11,7 @@ import { cancelOrder } from "./handlers/staff.cancel.js";
 
 import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
 import { openManualInsuranceModal, addManualInsuranceFromModal } from "./handlers/admin.addInsurance.js";
+import { handleManagePacksButton, handleManagePacksSelect, handleManagePacksModal } from "./handlers/admin.managePacks.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
 import { buildShopPanel } from "./panels/shopPanel.js";
@@ -84,6 +85,7 @@ export async function routeInteraction(interaction) {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "shop_select") return openOrderModal(interaction);
       if (interaction.customId.startsWith("ticket_model_select:")) return handleTicketVehicleSelect(interaction);
+      if (interaction.customId.startsWith("admin:packs:select:")) return handleManagePacksSelect(interaction);
       return;
     }
 
@@ -91,6 +93,7 @@ export async function routeInteraction(interaction) {
       if (interaction.customId.startsWith("order_create:")) return createOrderFromModal(interaction);
       if (interaction.customId.startsWith("admin_add_insurance_modal:")) return addManualInsuranceFromModal(interaction);
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
+      if (interaction.customId.startsWith("admin:packs:modal:")) return handleManagePacksModal(interaction);
       return;
     }
 
@@ -104,6 +107,12 @@ export async function routeInteraction(interaction) {
 
         if (id.startsWith("admin:add_insurance:")) {
           return openManualInsuranceModal(interaction);
+        }
+
+        if (id.startsWith("admin:packs:")) {
+          return handleManagePacksButton(interaction, {
+            refreshShopPanel: () => rebuildShopPanel(interaction.client, { forceCreate: false }),
+          });
         }
 
         if (id.startsWith("admin:nav:")) {
@@ -161,7 +170,6 @@ Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>
         }
 
         if (
-          id.startsWith("admin:packs:") ||
           id.startsWith("admin:insurance:") ||
           id.startsWith("admin:config:") ||
           id.startsWith("admin:logs:")
