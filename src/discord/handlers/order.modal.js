@@ -13,6 +13,7 @@ import { IDS } from "../../config/constants.js";
 import { createTicketChannel } from "../utils/tickets.js";
 import { buildStaffPanel } from "../panels/staffPanel.js";
 import { safeReply } from "../utils/messages.js";
+import { buildPackDetailFields } from "../utils/packDetailEmbed.js";
 
 export async function createOrderFromModal(interaction) {
   if (!interaction.deferred && !interaction.replied) {
@@ -145,16 +146,9 @@ export async function createOrderFromModal(interaction) {
     }
 
     if (type === "DONATE") {
-      const bullets = donatePack?.benefits?.length
-        ? donatePack.benefits.map((x) => `• ${x}`).join("\n")
-        : (donatePack?.displayItems ?? []).map((x) => `• ${x}`).join("\n");
-
-      if (bullets) {
-        intro.addFields({
-          name: "สิทธิ์ที่ได้รับ",
-          value: bullets.slice(0, 1024),
-          inline: false,
-        });
+      const detailFields = buildPackDetailFields(donatePack, "รายละเอียดแพ็ก");
+      if (detailFields.length) {
+        intro.addFields(...detailFields);
       }
     }
 
