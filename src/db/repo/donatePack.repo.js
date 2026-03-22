@@ -366,9 +366,11 @@ export const DonatePackRepo = {
          panel_summary,
          sort_order,
          created_by,
-         updated_by
+         updated_by,
+         image_url,
+         embed_color
        )
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        returning *`,
       [
         payload.pack_code,
@@ -419,6 +421,8 @@ export const DonatePackRepo = {
          panel_summary = $7,
          sort_order = $8,
          updated_by = $9,
+         image_url = $10,
+         embed_color = $11,
          updated_at = now()
        where pack_id = $1
        returning *`,
