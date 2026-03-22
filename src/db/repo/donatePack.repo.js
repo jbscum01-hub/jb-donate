@@ -58,6 +58,84 @@ function normalizeInt(v, fallback = 0) {
   return Math.max(0, Math.floor(n));
 }
 
+async function syncPackDerivedFieldsWithClient(client, packId, actor = null) {
+  const [{ rows: vehicleAggRows }, { rows: boatAggRows }] = await Promise.all([
+    client.query(
+      `select
+         count(*)::int as cnt,
+         coalesce(max(insurance_total), 0)::int as ins_total,
+         coalesce(max(insurance_days), 0)::int as ins_days
+       from tb_donate_pack_master_vehicle
+       where pack_id = $1 and is_active = true`,
+      [packId]
+    ),
+    client.query(
+      `select
+         count(*)::int as cnt,
+         coalesce(max(insurance_total), 0)::int as ins_total,
+         coalesce(max(insurance_days), 0)::int as ins_days
+       from tb_donate_pack_master_boat
+       where pack_id = $1 and is_active = true`,
+      [packId]
+    ),
+  ]);
+
+  const vehicleAgg = vehicleAggRows[0] || { cnt: 0, ins_total: 0, ins_days: 0 };
+  const boatAgg = boatAggRows[0] || { cnt: 0, ins_total: 0, ins_days: 0 };
+
+  await client.query(
+    `update tb_donate_pack_master
+     set
+       allow_vehicle_select = $2,
+       allow_boat_select = $3,
+       car_insurance_total = $4,
+       car_insurance_days = $5,
+       boat_insurance_total = $6,
+       boat_insurance_days = $7,
+       updated_by = coalesce($8, updated_by),
+       updated_at = now()
+     where pack_id = $1`,
+    [
+      packId,
+      Number(vehicleAgg.cnt) > 0,
+      Number(boatAgg.cnt) > 0,
+      Number(vehicleAgg.ins_total || 0),
+      Number(vehicleAgg.ins_days || 0),
+      Number(boatAgg.ins_total || 0),
+      Number(boatAgg.ins_days || 0),
+      normalizeNullableText(actor),
+    ]
+  );
+}
+
+async function replaceRows({ packId, table, idCol, rows, cols, mapRow, actor = null }) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(`delete from ${table} where pack_id = $1`, [packId]);
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = mapRow(rows[i], i);
+      const values = cols.map((c) => row[c]);
+      const params = values.map((_, idx) => `$${idx + 1}`).join(",");
+      await client.query(
+        `insert into ${table} (${cols.join(",")}) values (${params})`,
+        values
+      );
+    }
+
+    await syncPackDerivedFieldsWithClient(client, packId, actor);
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  return true;
+}
+
 export const DonatePackRepo = {
   async listActiveShopOptions() {
     const { rows: packs } = await pool.query(
@@ -436,6 +514,7 @@ export const DonatePackRepo = {
     return {
       ...pack,
       benefits,
+      benefitRows,
       items: itemRows,
       displayItems,
       spawnItems,
@@ -443,11 +522,13 @@ export const DonatePackRepo = {
         .split("\n")
         .map((x) => x.trim())
         .filter(Boolean),
+      vehicleRows,
       vehicleChoices: vehicleRows.map((x) => x.vehicle_name),
       vehicleChoiceMap: vehicleRows.reduce((acc, x) => {
         acc[x.vehicle_name] = x;
         return acc;
       }, {}),
+      boatRows,
       boatChoices: boatRows.map((x) => x.boat_name),
       boatChoiceMap: boatRows.reduce((acc, x) => {
         acc[x.boat_name] = x;
@@ -468,5 +549,124 @@ export const DonatePackRepo = {
             }
           : null,
     };
+  },
+
+  async getPackDetailsById(packId) {
+    const pack = await this.getPackById(packId);
+    if (!pack) return null;
+    return this.getPackDetails(pack.pack_code);
+  },
+
+  async replaceBenefits(packId, benefits = [], actor = null) {
+    return replaceRows({
+      packId,
+      table: "tb_donate_pack_master_benefit",
+      rows: benefits,
+      cols: ["pack_id", "benefit_text", "sort_order", "is_active"],
+      mapRow: (row, idx) => ({
+        pack_id: packId,
+        benefit_text: normalizeText(row.benefit_text),
+        sort_order: normalizeInt(row.sort_order, (idx + 1) * 10),
+        is_active: true,
+      }),
+      actor,
+    });
+  },
+
+  async replaceItems(packId, items = [], actor = null) {
+    return replaceRows({
+      packId,
+      table: "tb_donate_pack_master_item",
+      rows: items,
+      cols: [
+        "pack_id",
+        "item_code",
+        "item_name",
+        "item_spawn_name",
+        "item_spawn_command_template",
+        "quantity",
+        "item_group",
+        "sort_order",
+        "is_active",
+      ],
+      mapRow: (row, idx) => ({
+        pack_id: packId,
+        item_code: normalizeNullableText(row.item_code),
+        item_name: normalizeText(row.item_name),
+        item_spawn_name: normalizeNullableText(row.item_spawn_name),
+        item_spawn_command_template: normalizeNullableText(row.item_spawn_command_template),
+        quantity: Math.max(1, normalizeInt(row.quantity, 1)),
+        item_group: normalizeNullableText(row.item_group),
+        sort_order: normalizeInt(row.sort_order, (idx + 1) * 10),
+        is_active: true,
+      }),
+      actor,
+    });
+  },
+
+  async replaceVehicles(packId, vehicles = [], actor = null) {
+    return replaceRows({
+      packId,
+      table: "tb_donate_pack_master_vehicle",
+      rows: vehicles,
+      cols: [
+        "pack_id",
+        "vehicle_code",
+        "vehicle_name",
+        "vehicle_model",
+        "vehicle_kind",
+        "spawn_command_template",
+        "insurance_total",
+        "insurance_days",
+        "sort_order",
+        "is_active",
+      ],
+      mapRow: (row, idx) => ({
+        pack_id: packId,
+        vehicle_code: normalizeNullableText(row.vehicle_code),
+        vehicle_name: normalizeText(row.vehicle_name),
+        vehicle_model: normalizeText(row.vehicle_model),
+        vehicle_kind: ["CAR", "BIKE", "AIR"].includes(String(row.vehicle_kind || "CAR").toUpperCase())
+          ? String(row.vehicle_kind || "CAR").toUpperCase()
+          : "CAR",
+        spawn_command_template: normalizeNullableText(row.spawn_command_template),
+        insurance_total: normalizeInt(row.insurance_total, 0),
+        insurance_days: normalizeInt(row.insurance_days, 0),
+        sort_order: normalizeInt(row.sort_order, (idx + 1) * 10),
+        is_active: true,
+      }),
+      actor,
+    });
+  },
+
+  async replaceBoats(packId, boats = [], actor = null) {
+    return replaceRows({
+      packId,
+      table: "tb_donate_pack_master_boat",
+      rows: boats,
+      cols: [
+        "pack_id",
+        "boat_code",
+        "boat_name",
+        "boat_model",
+        "spawn_command_template",
+        "insurance_total",
+        "insurance_days",
+        "sort_order",
+        "is_active",
+      ],
+      mapRow: (row, idx) => ({
+        pack_id: packId,
+        boat_code: normalizeNullableText(row.boat_code),
+        boat_name: normalizeText(row.boat_name),
+        boat_model: normalizeText(row.boat_model),
+        spawn_command_template: normalizeNullableText(row.spawn_command_template),
+        insurance_total: normalizeInt(row.insurance_total, 0),
+        insurance_days: normalizeInt(row.insurance_days, 0),
+        sort_order: normalizeInt(row.sort_order, (idx + 1) * 10),
+        is_active: true,
+      }),
+      actor,
+    });
   },
 };
