@@ -11,52 +11,71 @@ import { cancelOrder } from "./handlers/staff.cancel.js";
 
 import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
 import { openManualInsuranceModal, addManualInsuranceFromModal } from "./handlers/admin.addInsurance.js";
-import {
-  openCreatePackModal,
-  createPackFromModal,
-  openEditPackPicker,
-  openPreviewPackPicker,
-  openTogglePackPicker,
-  openEditPackModalFromSelect,
-  updatePackFromModal,
-  previewPackFromSelect,
-  togglePackFromSelect,
-  refreshShopPanelFromAdmin,
-} from "./handlers/admin.managePacks.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
 import { buildShopPanel } from "./panels/shopPanel.js";
 import { isAdmin } from "../domain/permissions.js";
-import { ENV } from "../config/env.js";
+import { IDS } from "../config/constants.js";
+import { setRuntimeConfig } from "../config/runtimeConfig.js";
 import { runVipTick } from "../jobs/vipRunner.js";
 import { isStaffActionId } from "./utils/customId.js";
 
 async function getAdminDashboardMessage(client) {
-  if (!ENV.ADMIN_DASHBOARD_CHANNEL_ID) throw new Error("Missing ENV.ADMIN_DASHBOARD_CHANNEL_ID");
-  const ch = await client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
+  const channelId = IDS.ADMIN_DASHBOARD_CHANNEL_ID;
+  if (!channelId) throw new Error("Missing ADMIN_DASHBOARD_CHANNEL_ID (DB/ENV)");
+
+  const ch = await client.channels.fetch(channelId).catch(() => null);
   if (!ch) throw new Error("Cannot fetch admin dashboard channel");
-  if (!ENV.ADMIN_DASHBOARD_MESSAGE_ID) throw new Error("Missing ENV.ADMIN_DASHBOARD_MESSAGE_ID");
-  const msg = await ch.messages.fetch(ENV.ADMIN_DASHBOARD_MESSAGE_ID);
-  if (!msg) throw new Error("Cannot fetch admin dashboard message");
+
+  const messageId = IDS.ADMIN_DASHBOARD_MESSAGE_ID;
+  if (!messageId) throw new Error("Missing ADMIN_DASHBOARD_MESSAGE_ID (DB/ENV)");
+
+  const msg = await ch.messages.fetch(messageId).catch(() => null);
+  if (!msg) throw new Error(`Cannot fetch admin dashboard message: ${messageId}`);
   return msg;
 }
 
-async function rebuildShopPanel(client) {
-  if (!ENV.SHOP_CHANNEL_ID) throw new Error("Missing ENV.SHOP_CHANNEL_ID");
-  const ch = await client.channels.fetch(ENV.SHOP_CHANNEL_ID);
+async function rebuildShopPanel(client, { forceCreate = false } = {}) {
+  const channelId = IDS.SHOP_CHANNEL_ID;
+  if (!channelId) throw new Error("Missing SHOP_CHANNEL_ID (DB/ENV)");
+
+  const ch = await client.channels.fetch(channelId).catch(() => null);
   if (!ch) throw new Error("Cannot fetch shop channel");
+
   const payload = await buildShopPanel();
 
-  if (ENV.PANEL_MESSAGE_ID) {
-    const oldMsg = await ch.messages.fetch(ENV.PANEL_MESSAGE_ID).catch(() => null);
-    if (oldMsg) {
-      await oldMsg.edit(payload);
-      return oldMsg;
+  if (!forceCreate) {
+    const panelMessageId = IDS.PANEL_MESSAGE_ID;
+    if (!panelMessageId) throw new Error("Missing PANEL_MESSAGE_ID (DB/ENV)");
+
+    const oldMsg = await ch.messages.fetch(panelMessageId).catch(() => null);
+    if (!oldMsg) {
+      throw new Error(`Cannot fetch panel message: ${panelMessageId} in channel ${channelId}`);
     }
+
+    await oldMsg.edit(payload);
+    return oldMsg;
   }
 
   const sent = await ch.send(payload);
   await sent.pin().catch(() => {});
+  await setRuntimeConfig("SHOP_CHANNEL_ID", ch.id);
+  await setRuntimeConfig("PANEL_MESSAGE_ID", sent.id);
+  return sent;
+}
+
+async function deployAdminPanel(client) {
+  const channelId = IDS.ADMIN_DASHBOARD_CHANNEL_ID;
+  if (!channelId) throw new Error("Missing ADMIN_DASHBOARD_CHANNEL_ID (DB/ENV)");
+
+  const ch = await client.channels.fetch(channelId).catch(() => null);
+  if (!ch) throw new Error("Cannot fetch admin dashboard channel");
+
+  const payload = await buildAdminDashboardMessage(client, "dashboard");
+  const sent = await ch.send(payload);
+  await sent.pin().catch(() => {});
+  await setRuntimeConfig("ADMIN_DASHBOARD_CHANNEL_ID", ch.id);
+  await setRuntimeConfig("ADMIN_DASHBOARD_MESSAGE_ID", sent.id);
   return sent;
 }
 
@@ -64,9 +83,6 @@ export async function routeInteraction(interaction) {
   try {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "shop_select") return openOrderModal(interaction);
-      if (interaction.customId === "admin:packs:edit_select") return openEditPackModalFromSelect(interaction);
-      if (interaction.customId === "admin:packs:preview_select") return previewPackFromSelect(interaction);
-      if (interaction.customId === "admin:packs:toggle_select") return togglePackFromSelect(interaction);
       if (interaction.customId.startsWith("ticket_model_select:")) return handleTicketVehicleSelect(interaction);
       return;
     }
@@ -74,8 +90,6 @@ export async function routeInteraction(interaction) {
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith("order_create:")) return createOrderFromModal(interaction);
       if (interaction.customId.startsWith("admin_add_insurance_modal:")) return addManualInsuranceFromModal(interaction);
-      if (interaction.customId === "admin_pack_create_modal") return createPackFromModal(interaction);
-      if (interaction.customId.startsWith("admin_pack_edit_modal:")) return updatePackFromModal(interaction);
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
       return;
     }
@@ -98,11 +112,6 @@ export async function routeInteraction(interaction) {
           return interaction.update(payload);
         }
 
-        if (id === "admin:packs:create") return openCreatePackModal(interaction);
-        if (id === "admin:packs:edit") return openEditPackPicker(interaction);
-        if (id === "admin:packs:preview") return openPreviewPackPicker(interaction);
-        if (id === "admin:packs:toggle") return openTogglePackPicker(interaction);
-
         await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
         if (id === "admin:refresh") {
@@ -117,21 +126,42 @@ export async function routeInteraction(interaction) {
           return interaction.editReply(`✅ VIP Tick done: due=${r?.due ?? 0}, warn=${r?.warn ?? 0}, expired=${r?.expired ?? 0}`);
         }
 
-        if (id === "admin:tool:post_shop" || id === "admin:tool:refresh_shop") {
-          const sent = await rebuildShopPanel(interaction.client);
-          return interaction.editReply(`✅ ส่ง Shop Panel แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.SHOP_CHANNEL_ID}>`);
+        if (id === "admin:tool:refresh_shop") {
+          const msg = await rebuildShopPanel(interaction.client, { forceCreate: false });
+          return interaction.editReply(`✅ Refresh Shop Panel แล้ว
+Message ID: ${msg.id}
+Channel: <#${IDS.SHOP_CHANNEL_ID}>`);
         }
 
-        if (id === "admin:tool:deploy_admin" || id === "admin:tool:rebuild_admin") {
-          const ch = await interaction.client.channels.fetch(ENV.ADMIN_DASHBOARD_CHANNEL_ID);
+        if (id === "admin:tool:post_shop") {
+          const sent = await rebuildShopPanel(interaction.client, { forceCreate: true });
+          return interaction.editReply(`✅ ส่ง Shop Panel ใหม่แล้ว
+Message ID: ${sent.id}
+Channel: <#${IDS.SHOP_CHANNEL_ID}>
+
+ระบบได้บันทึก PANEL_MESSAGE_ID ลง DB ให้แล้ว`);
+        }
+
+        if (id === "admin:tool:rebuild_admin") {
+          const msg = await getAdminDashboardMessage(interaction.client);
           const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
-          const sent = await ch.send(payload);
-          return interaction.editReply(`✅ ส่ง Admin Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.ADMIN_DASHBOARD_CHANNEL_ID}>\n\nถ้าจะใช้ข้อความนี้เป็นหลัก ให้เอา ID ไปใส่ ADMIN_DASHBOARD_MESSAGE_ID`);
+          await msg.edit(payload);
+          return interaction.editReply(`✅ Rebuild Admin Panel แล้ว
+Message ID: ${msg.id}
+Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>`);
         }
 
-        if (id === "admin:packs:refresh") return refreshShopPanelFromAdmin(interaction);
+        if (id === "admin:tool:deploy_admin") {
+          const sent = await deployAdminPanel(interaction.client);
+          return interaction.editReply(`✅ ส่ง Admin Panel ใหม่แล้ว
+Message ID: ${sent.id}
+Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>
+
+ระบบได้บันทึก ADMIN_DASHBOARD_MESSAGE_ID ลง DB ให้แล้ว`);
+        }
 
         if (
+          id.startsWith("admin:packs:") ||
           id.startsWith("admin:insurance:") ||
           id.startsWith("admin:config:") ||
           id.startsWith("admin:logs:")

@@ -10,6 +10,7 @@ import { createClient } from "./discord/client.js";
 import { routeInteraction } from "./discord/router.js";
 import { ENV } from "./config/env.js";
 import { IDS } from "./config/constants.js";
+import { loadRuntimeDiscordConfig, setRuntimeConfig } from "./config/runtimeConfig.js";
 import { runVipTick } from "./jobs/vipRunner.js";
 import { buildAdminDashboardMessage } from "./discord/panels/adminDashboard.js";
 
@@ -44,9 +45,9 @@ async function vipTickSafe() {
 }
 
 async function ensureAdminDashboardMessage(client) {
-  const channelId = ENV.ADMIN_DASHBOARD_CHANNEL_ID;
+  const channelId = IDS.ADMIN_DASHBOARD_CHANNEL_ID;
   if (!channelId) {
-    console.warn("⚠️ ADMIN_DASHBOARD_CHANNEL_ID is not set");
+    console.warn("⚠️ ADMIN_DASHBOARD_CHANNEL_ID is not set (DB/ENV)");
     return null;
   }
 
@@ -57,7 +58,7 @@ async function ensureAdminDashboardMessage(client) {
   }
 
   const payload = await buildAdminDashboardMessage(client, "dashboard");
-  const existingId = ENV.ADMIN_DASHBOARD_MESSAGE_ID;
+  const existingId = IDS.ADMIN_DASHBOARD_MESSAGE_ID;
 
   if (existingId) {
     const msg = await channel.messages.fetch(existingId).catch(() => null);
@@ -66,20 +67,24 @@ async function ensureAdminDashboardMessage(client) {
       console.log("✅ Admin dashboard message updated:", msg.id);
       return msg.id;
     }
-    console.warn("⚠️ ADMIN_DASHBOARD_MESSAGE_ID not found, will create a new one:", existingId);
+    console.warn("⚠️ ADMIN_DASHBOARD_MESSAGE_ID not found in DB/ENV, will create a new one:", existingId);
   }
 
   const created = await channel.send(payload);
+  await created.pin().catch(() => {});
+  await setRuntimeConfig("ADMIN_DASHBOARD_CHANNEL_ID", channel.id);
+  await setRuntimeConfig("ADMIN_DASHBOARD_MESSAGE_ID", created.id);
   console.log("✅ Admin dashboard message created:", created.id);
-  console.log("➡️ Copy this value to Railway ENV: ADMIN_DASHBOARD_MESSAGE_ID =", created.id);
+  console.log("➡️ Saved ADMIN_DASHBOARD_MESSAGE_ID to tb_donate_discord_config");
   return created.id;
 }
 
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log(`Shop Channel: ${IDS.SHOP_CHANNEL_ID}`);
+  await loadRuntimeDiscordConfig();
+  console.log(`Shop Channel: ${IDS.SHOP_CHANNEL_ID || "(not set)"}`);
 
-  if (ENV.SEND_ADMIN_DASHBOARD_ON_START || ENV.ADMIN_DASHBOARD_MESSAGE_ID) {
+  if (ENV.SEND_ADMIN_DASHBOARD_ON_START || IDS.ADMIN_DASHBOARD_MESSAGE_ID || IDS.ADMIN_DASHBOARD_CHANNEL_ID) {
     await ensureAdminDashboardMessage(client);
   }
 

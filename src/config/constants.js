@@ -1,21 +1,22 @@
-import { ENV } from "./env.js";
+import { getRuntimeConfig } from "./runtimeConfig.js";
 
 export const IDS = {
-  SHOP_CHANNEL_ID: ENV.SHOP_CHANNEL_ID,
-  QUEUE_CHANNEL_ID: ENV.QUEUE_CHANNEL_ID,
-  LOG_CHANNEL_ID: ENV.LOG_CHANNEL_ID,
-  VIP_LOG_CHANNEL_ID: ENV.VIP_LOG_CHANNEL_ID,
-  SLIP_ARCHIVE_CHANNEL_ID: ENV.SLIP_ARCHIVE_CHANNEL_ID,
-  VEHICLE_PLATE_LOG_CHANNEL_ID: ENV.VEHICLE_PLATE_LOG_CHANNEL_ID,
+  get SHOP_CHANNEL_ID() { return getRuntimeConfig("SHOP_CHANNEL_ID"); },
+  get QUEUE_CHANNEL_ID() { return getRuntimeConfig("QUEUE_CHANNEL_ID"); },
+  get LOG_CHANNEL_ID() { return getRuntimeConfig("LOG_CHANNEL_ID"); },
+  get VIP_LOG_CHANNEL_ID() { return getRuntimeConfig("VIP_LOG_CHANNEL_ID"); },
+  get SLIP_ARCHIVE_CHANNEL_ID() { return getRuntimeConfig("SLIP_ARCHIVE_CHANNEL_ID"); },
+  get VEHICLE_PLATE_LOG_CHANNEL_ID() { return getRuntimeConfig("VEHICLE_PLATE_LOG_CHANNEL_ID"); },
 
-  ADMIN_ROLE_ID: ENV.ADMIN_ROLE_ID,
+  get ADMIN_ROLE_ID() { return getRuntimeConfig("ADMIN_ROLE_ID"); },
 
-  ADMIN_DASHBOARD_CHANNEL_ID: ENV.ADMIN_DASHBOARD_CHANNEL_ID,
-  ADMIN_DASHBOARD_MESSAGE_ID: ENV.ADMIN_DASHBOARD_MESSAGE_ID,
+  get ADMIN_DASHBOARD_CHANNEL_ID() { return getRuntimeConfig("ADMIN_DASHBOARD_CHANNEL_ID"); },
+  get ADMIN_DASHBOARD_MESSAGE_ID() { return getRuntimeConfig("ADMIN_DASHBOARD_MESSAGE_ID"); },
 
-  VIP_BASIC_ROLE_ID: ENV.VIP_BASIC_ROLE_ID,
-  VIP_PRO_ROLE_ID: ENV.VIP_PRO_ROLE_ID,
-  VIP_ELITE_ROLE_ID: ENV.VIP_ELITE_ROLE_ID,
+  get VIP_BASIC_ROLE_ID() { return getRuntimeConfig("VIP_BASIC_ROLE_ID"); },
+  get VIP_PRO_ROLE_ID() { return getRuntimeConfig("VIP_PRO_ROLE_ID"); },
+  get VIP_ELITE_ROLE_ID() { return getRuntimeConfig("VIP_ELITE_ROLE_ID"); },
 
-  TICKET_CATEGORY_ID: ENV.TICKET_CATEGORY_ID,
+  get TICKET_CATEGORY_ID() { return getRuntimeConfig("TICKET_CATEGORY_ID"); },
+  get PANEL_MESSAGE_ID() { return getRuntimeConfig("PANEL_MESSAGE_ID"); },
 };

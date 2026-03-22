@@ -1,5 +1,6 @@
 import { IDS } from "../config/constants.js";
 
 export function isAdmin(member) {
-  return Boolean(member?.roles?.cache?.has(IDS.ADMIN_ROLE_ID));
+  const roleId = IDS.ADMIN_ROLE_ID;
+  return Boolean(roleId && member?.roles?.cache?.has(roleId));
 }

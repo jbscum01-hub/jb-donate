@@ -74,3 +74,22 @@ Optional: use `render.yaml` as a blueprint.
 - `src/db/repo/*`          : database access layer
 - `src/jobs/*`             : scheduled tasks
 
+
+
+## Runtime Discord Config (DB-first)
+
+ระบบ panel สำคัญถูกปรับให้ใช้ `tb_donate_discord_config` เป็นหลักแล้ว โดยจะ fallback ไป `.env` เฉพาะตอน DB ยังไม่มีค่า
+
+คีย์ที่ระบบใช้งานแล้ว:
+- `SHOP_CHANNEL_ID`
+- `PANEL_MESSAGE_ID`
+- `ADMIN_DASHBOARD_CHANNEL_ID`
+- `ADMIN_DASHBOARD_MESSAGE_ID`
+
+พฤติกรรมใหม่:
+- `Deploy Shop Panel` = สร้างข้อความใหม่ + บันทึก `PANEL_MESSAGE_ID` ลง DB
+- `Refresh Shop Panel` = แก้ข้อความเดิมเท่านั้น ถ้าไม่เจอจะขึ้น error ชัดเจน
+- `Deploy Admin Panel` = สร้างข้อความใหม่ + บันทึก `ADMIN_DASHBOARD_MESSAGE_ID` ลง DB
+- `Rebuild Admin Panel` = แก้ข้อความเดิมเท่านั้น
+
+ถ้า schema เก่ามี unique constraint ผิดบน `tb_donate_discord_config` ให้รัน `scripts/patch_discord_config_constraints.sql` ก่อน
