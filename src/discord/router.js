@@ -11,6 +11,18 @@ import { cancelOrder } from "./handlers/staff.cancel.js";
 
 import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
 import { openManualInsuranceModal, addManualInsuranceFromModal } from "./handlers/admin.addInsurance.js";
+import {
+  openCreatePackModal,
+  createPackFromModal,
+  openEditPackPicker,
+  openPreviewPackPicker,
+  openTogglePackPicker,
+  openEditPackModalFromSelect,
+  updatePackFromModal,
+  previewPackFromSelect,
+  togglePackFromSelect,
+  refreshShopPanelFromAdmin,
+} from "./handlers/admin.managePacks.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
 import { buildShopPanel } from "./panels/shopPanel.js";
@@ -52,6 +64,9 @@ export async function routeInteraction(interaction) {
   try {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "shop_select") return openOrderModal(interaction);
+      if (interaction.customId === "admin:packs:edit_select") return openEditPackModalFromSelect(interaction);
+      if (interaction.customId === "admin:packs:preview_select") return previewPackFromSelect(interaction);
+      if (interaction.customId === "admin:packs:toggle_select") return togglePackFromSelect(interaction);
       if (interaction.customId.startsWith("ticket_model_select:")) return handleTicketVehicleSelect(interaction);
       return;
     }
@@ -59,6 +74,8 @@ export async function routeInteraction(interaction) {
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith("order_create:")) return createOrderFromModal(interaction);
       if (interaction.customId.startsWith("admin_add_insurance_modal:")) return addManualInsuranceFromModal(interaction);
+      if (interaction.customId === "admin_pack_create_modal") return createPackFromModal(interaction);
+      if (interaction.customId.startsWith("admin_pack_edit_modal:")) return updatePackFromModal(interaction);
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
       return;
     }
@@ -80,6 +97,11 @@ export async function routeInteraction(interaction) {
           const payload = await buildAdminDashboardMessage(interaction.client, view);
           return interaction.update(payload);
         }
+
+        if (id === "admin:packs:create") return openCreatePackModal(interaction);
+        if (id === "admin:packs:edit") return openEditPackPicker(interaction);
+        if (id === "admin:packs:preview") return openPreviewPackPicker(interaction);
+        if (id === "admin:packs:toggle") return openTogglePackPicker(interaction);
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
@@ -107,8 +129,9 @@ export async function routeInteraction(interaction) {
           return interaction.editReply(`✅ ส่ง Admin Panel ใหม่แล้ว\nMessage ID: ${sent.id}\nChannel: <#${ENV.ADMIN_DASHBOARD_CHANNEL_ID}>\n\nถ้าจะใช้ข้อความนี้เป็นหลัก ให้เอา ID ไปใส่ ADMIN_DASHBOARD_MESSAGE_ID`);
         }
 
+        if (id === "admin:packs:refresh") return refreshShopPanelFromAdmin(interaction);
+
         if (
-          id.startsWith("admin:packs:") ||
           id.startsWith("admin:insurance:") ||
           id.startsWith("admin:config:") ||
           id.startsWith("admin:logs:")
