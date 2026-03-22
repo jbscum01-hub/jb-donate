@@ -367,9 +367,29 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
       embeds: [
         buildSimpleEmbed({
           title: "📦 Manage Packs",
-          description: "จัดการแพ็กทั้งหมดจากเมนูนี้\n\nตอนนี้เปิดโครงเมนูพร้อมปุ่มไว้แล้ว เพื่อให้หน้าแอดมินสมบูรณ์และไม่กดแล้วพัง\n\nสิ่งที่ใช้ได้ทันทีตอนนี้คือ **Refresh Shop Panel** ผ่าน Panel Tools หรือปุ่มในหน้านี้",
+          description:
+            "จัดการแพ็กโดเนททั้งหมดจากหน้านี้ได้เลย โดยปุ่มหลักของระบบแพ็กใช้งานได้แล้ว และอัปเดตข้อมูลจากฐานข้อมูลจริง
+
+เหมาะสำหรับสร้างแพ็กใหม่ แก้ข้อมูลแพ็ก ปรับ contents ใส่รูป/สี และรีเฟรชหน้า Shop หลังแก้ไข",
           fields: [
-            { name: "พร้อมต่อยอด", value: "➕ Create Pack\n✏️ Edit Pack\n👁 Preview Pack\n✅ Enable / Disable Pack\n🗑 Delete Pack\n🔄 Refresh Shop Panel", inline: false },
+            {
+              name: "ใช้งานได้ตอนนี้",
+              value:
+                "➕ Create Pack
+✏️ Edit Pack
+🧩 Edit Contents
+🖼️ Image / Color
+👁️ Preview Pack
+✅ Enable / Disable
+♻️ Refresh Shop",
+              inline: false,
+            },
+            {
+              name: "หมายเหตุ",
+              value:
+                "หลังแก้แพ็กหรือ contents แล้ว แนะนำกด **Refresh Shop** เพื่ออัปเดตหน้า Shop ให้เป็นข้อมูลล่าสุด",
+              inline: false,
+            },
           ],
         }),
       ],
@@ -383,11 +403,25 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
       embeds: [
         buildSimpleEmbed({
           title: "🛡️ Insurance Tools",
-          description: "ใช้ของเดิมในระบบเป็นฐาน และคง flow เดิมที่ลงทะเบียนแล้วสร้าง Vehicle / Boat Card พร้อมปุ่มใช้ประกันทันที",
+          description:
+            "จัดการประกันรถและเรือจากหน้านี้ได้เลย โดยยังคง flow เดิมของระบบไว้ และเพิ่มเครื่องมือฝั่งแอดมินให้ใช้งานสะดวกขึ้น",
           fields: [
-            { name: "Manual Insurance Modal", value: "Player (mention หรือ user id)\nPlate\nModel\nจำนวนครั้ง\nจำนวนวัน", inline: false },
-            { name: "ใช้งานได้ทันที", value: "🚗 Register Car Insurance\n🛥 Register Boat Insurance", inline: false },
-            { name: "เตรียมไว้ต่อยอด", value: "🔍 Search Insurance\n❌ Cancel Insurance\n♻️ Rebuild Insurance Card", inline: false },
+            {
+              name: "ใช้งานได้ตอนนี้",
+              value:
+                "🚗 Register Car Insurance
+🛥️ Register Boat Insurance
+🔍 Search Insurance
+❌ Cancel Insurance
+♻️ Rebuild Card",
+              inline: false,
+            },
+            {
+              name: "รองรับข้อมูลหลัก",
+              value:
+                "ผู้เล่น / Plate / Model / Kind / จำนวนครั้ง / จำนวนวัน / ค้นหา / ยกเลิก / rebuild card จาก DB จริง",
+              inline: false,
+            },
           ],
         }),
       ],
@@ -401,10 +435,27 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
       embeds: [
         buildSimpleEmbed({
           title: "⚙️ System Config",
-          description: "หน้าตั้งค่าระบบหลักผ่าน Discord โดยอิงค่า ENV / config table ของระบบ",
+          description:
+            "หน้าตั้งค่าระบบหลักผ่าน Discord สำหรับค่า channel / role / config สำคัญของระบบ
+
+หน้านี้ยังเป็นโครงสำหรับต่อยอด แต่ปุ่มถูกเปิดไว้ให้หน้าแอดมินครบและไม่กดแล้วพัง",
           fields: [
-            { name: "รายการที่ต้องมี", value: "🛒 Shop Channel\n🧾 Queue Channel\n📦 Archive Channel\n📜 Log Channel\n👮 Staff Role\n🛡 Insurance Card Channel", inline: false },
-            { name: "สถานะ", value: "หน้านี้เปิดโครงเมนูและปุ่มไว้แล้ว เพื่อกดแล้วไม่พัง และพร้อมต่อยอดเป็น modal / select menu", inline: false },
+            {
+              name: "รายการที่เตรียมไว้",
+              value:
+                "🛒 Shop Channel
+🧾 Queue Channel
+📜 Log Channel
+🛡️ Insurance Channel
+👮 Staff Role",
+              inline: false,
+            },
+            {
+              name: "สถานะ",
+              value:
+                "ยังเหมาะสำหรับต่อยอดเป็น modal / select menu ในรอบถัดไป",
+              inline: false,
+            },
           ],
         }),
       ],
@@ -418,10 +469,24 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
       embeds: [
         buildSimpleEmbed({
           title: "📜 Logs / Audit",
-          description: "หน้าดูย้อนหลังของระบบ โดยอิง tb_donate_audit_logs และ log ตารางย่อยของ donate",
+          description:
+            "หน้าดูย้อนหลังของระบบ โดยอ่านจาก audit log และ insurance log จริง เพื่อช่วยตรวจสอบการทำงานของแอดมินและระบบย้อนหลัง",
           fields: [
-            { name: "รายการที่วางไว้", value: "📌 Recent Logs\n📦 Pack Changes\n🛡 Insurance Logs\n⚙️ Config Changes", inline: false },
-            { name: "สถานะ", value: "ปุ่มในหน้านี้ใช้ดู log ล่าสุดได้แล้วแบบ ephemeral และดึงจาก DB จริง", inline: false },
+            {
+              name: "ใช้งานได้ตอนนี้",
+              value:
+                "📌 Recent Logs
+📦 Pack Changes
+🛡️ Insurance Logs
+⚙️ Config Changes",
+              inline: false,
+            },
+            {
+              name: "เหมาะสำหรับ",
+              value:
+                "เช็กการแก้แพ็ก / การใช้งาน insurance / การเปลี่ยน config / การดู action ล่าสุดของระบบ",
+              inline: false,
+            },
           ],
         }),
       ],
@@ -429,22 +494,30 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
     };
   }
 
-
   if (view === "search") {
     components.splice(1, 0, searchActionsRow());
     return {
       embeds: [
         buildSimpleEmbed({
           title: "🔎 Admin Search",
-          description: "ค้นหาข้อมูลแอดมินจากจุดเดียว แล้วสรุป Orders / Insurance / Audit ให้ทันที",
+          description:
+            "ค้นหาข้อมูลแอดมินจากจุดเดียว แล้วสรุป Orders / Insurance / Audit ให้ทันที",
           fields: [
-            { name: "ค้นหาได้จาก", value: `Order No
+            {
+              name: "ค้นหาได้จาก",
+              value: `Order No
 Plate
 Discord ID หรือ mention
 Pack Code
-IGN / User Tag`, inline: false },
-            { name: "วิธีใช้", value: `กดปุ่ม Admin Search แล้วกรอก keyword
-Mode เว้นว่างได้ ระบบจะใช้ AUTO`, inline: false },
+IGN / User Tag`,
+              inline: false,
+            },
+            {
+              name: "วิธีใช้",
+              value: `กดปุ่ม Admin Search แล้วกรอก keyword
+Mode เว้นว่างได้ ระบบจะใช้ AUTO`,
+              inline: false,
+            },
           ],
         }),
       ],
@@ -458,10 +531,24 @@ Mode เว้นว่างได้ ระบบจะใช้ AUTO`, inline
       embeds: [
         buildSimpleEmbed({
           title: "🛠️ Panel Tools",
-          description: "เครื่องมือ deploy / refresh panel แบบไม่ต้องไปแก้ข้อความมือใน Discord",
+          description:
+            "เครื่องมือสำหรับ deploy และ refresh panel ต่าง ๆ โดยไม่ต้องไปแก้ข้อความมือใน Discord",
           fields: [
-            { name: "ใช้งานได้ทันที", value: "🚀 Deploy Shop Panel\n♻️ Refresh Shop Panel\n🧰 Deploy Admin Panel\n🗂 Rebuild Panel", inline: false },
-            { name: "หมายเหตุ", value: "Deploy Admin Panel จะสร้างข้อความใหม่ในห้องแอดมินและส่ง message id กลับมาให้", inline: false },
+            {
+              name: "ใช้งานได้ตอนนี้",
+              value:
+                "🚀 Deploy Shop Panel
+♻️ Refresh Shop Panel
+🧰 Deploy Admin Panel
+🗂️ Rebuild Panel",
+              inline: false,
+            },
+            {
+              name: "หมายเหตุ",
+              value:
+                "Deploy จะใช้สำหรับสร้างข้อความใหม่ ส่วน Refresh / Rebuild จะใช้กับ panel เดิมที่ระบบผูกไว้",
+              inline: false,
+            },
           ],
         }),
       ],
