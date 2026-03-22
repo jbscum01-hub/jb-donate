@@ -368,20 +368,20 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
         buildSimpleEmbed({
           title: "📦 Manage Packs",
           description:
-            "จัดการแพ็กโดเนททั้งหมดจากหน้านี้ได้เลย โดยปุ่มหลักของระบบแพ็กใช้งานได้แล้ว และอัปเดตข้อมูลจากฐานข้อมูลจริง
+            `จัดการแพ็กโดเนททั้งหมดจากหน้านี้ได้เลย โดยปุ่มหลักของระบบแพ็กใช้งานได้แล้ว และอัปเดตข้อมูลจากฐานข้อมูลจริง
 
-เหมาะสำหรับสร้างแพ็กใหม่ แก้ข้อมูลแพ็ก ปรับ contents ใส่รูป/สี และรีเฟรชหน้า Shop หลังแก้ไข",
+เหมาะสำหรับสร้างแพ็กใหม่ แก้ข้อมูลแพ็ก ปรับ contents ใส่รูป/สี และรีเฟรชหน้า Shop หลังแก้ไข`,
           fields: [
             {
               name: "ใช้งานได้ตอนนี้",
               value:
-                "➕ Create Pack
+                `➕ Create Pack
 ✏️ Edit Pack
 🧩 Edit Contents
 🖼️ Image / Color
 👁️ Preview Pack
 ✅ Enable / Disable
-♻️ Refresh Shop",
+♻️ Refresh Shop`,
               inline: false,
             },
             {
@@ -409,11 +409,11 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
             {
               name: "ใช้งานได้ตอนนี้",
               value:
-                "🚗 Register Car Insurance
+                `🚗 Register Car Insurance
 🛥️ Register Boat Insurance
 🔍 Search Insurance
 ❌ Cancel Insurance
-♻️ Rebuild Card",
+♻️ Rebuild Card`,
               inline: false,
             },
             {
@@ -436,18 +436,18 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
         buildSimpleEmbed({
           title: "⚙️ System Config",
           description:
-            "หน้าตั้งค่าระบบหลักผ่าน Discord สำหรับค่า channel / role / config สำคัญของระบบ
+            `หน้าตั้งค่าระบบหลักผ่าน Discord สำหรับค่า channel / role / config สำคัญของระบบ
 
-หน้านี้ยังเป็นโครงสำหรับต่อยอด แต่ปุ่มถูกเปิดไว้ให้หน้าแอดมินครบและไม่กดแล้วพัง",
+หน้านี้ยังเป็นโครงสำหรับต่อยอด แต่ปุ่มถูกเปิดไว้ให้หน้าแอดมินครบและไม่กดแล้วพัง`,
           fields: [
             {
               name: "รายการที่เตรียมไว้",
               value:
-                "🛒 Shop Channel
+                `🛒 Shop Channel
 🧾 Queue Channel
 📜 Log Channel
 🛡️ Insurance Channel
-👮 Staff Role",
+👮 Staff Role`,
               inline: false,
             },
             {
@@ -475,10 +475,10 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
             {
               name: "ใช้งานได้ตอนนี้",
               value:
-                "📌 Recent Logs
+                `📌 Recent Logs
 📦 Pack Changes
 🛡️ Insurance Logs
-⚙️ Config Changes",
+⚙️ Config Changes`,
               inline: false,
             },
             {
@@ -537,10 +537,10 @@ Mode เว้นว่างได้ ระบบจะใช้ AUTO`,
             {
               name: "ใช้งานได้ตอนนี้",
               value:
-                "🚀 Deploy Shop Panel
+                `🚀 Deploy Shop Panel
 ♻️ Refresh Shop Panel
 🧰 Deploy Admin Panel
-🗂️ Rebuild Panel",
+🗂️ Rebuild Panel`,
               inline: false,
             },
             {
