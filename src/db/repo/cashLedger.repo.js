@@ -46,32 +46,53 @@ export const CashLedgerRepo = {
       return { total_in: 0, total_out: 0, current_balance: 0, tx_count: 0, last_tx_at: null, ready: false };
     }
 
-    const values = [];
-    const where = [];
+    const ledgerWhere = [];
+    const ledgerValues = [];
     if (guildId) {
-      values.push(guildId);
-      where.push(`guild_id = $${values.length}`);
+      ledgerValues.push(guildId);
+      ledgerWhere.push(`guild_id = $${ledgerValues.length}`);
     }
-    const whereSql = where.length ? `where ${where.join(" and ")}` : "";
+    const ledgerWhereSql = ledgerWhere.length ? `where ${ledgerWhere.join(" and ")}` : "";
 
-    const { rows } = await pool.query(
-      `select
-         coalesce(sum(case when txn_type = 'IN' then amount else 0 end), 0)::bigint as total_in,
-         coalesce(sum(case when txn_type = 'OUT' then amount else 0 end), 0)::bigint as total_out,
-         coalesce(max(balance_after), 0)::bigint as current_balance,
-         count(*)::bigint as tx_count,
-         max(created_at) as last_tx_at
-       from tb_donate_cash_ledger
-       ${whereSql}`,
-      values,
-    );
+    const orderWhere = [];
+    const orderValues = [];
+    if (guildId) {
+      orderValues.push(guildId);
+      orderWhere.push(`guild_id = $${orderValues.length}`);
+    }
+    orderWhere.push(`status = 'SUCCESS'`);
+    const orderWhereSql = `where ${orderWhere.join(" and ")}`;
+
+    const [ledgerRes, donateRes] = await Promise.all([
+      pool.query(
+        `select
+           coalesce(sum(case when txn_type = 'IN' then amount else 0 end), 0)::bigint as total_in,
+           coalesce(sum(case when txn_type = 'OUT' then amount else 0 end), 0)::bigint as total_out,
+           count(*)::bigint as tx_count,
+           max(created_at) as last_tx_at
+         from tb_donate_cash_ledger
+         ${ledgerWhereSql}`,
+        ledgerValues,
+      ),
+      pool.query(
+        `select coalesce(sum(amount), 0)::bigint as donated_total
+         from tb_donate_orders
+         ${orderWhereSql}`,
+        orderValues,
+      ),
+    ]);
+
+    const totalIn = n(ledgerRes.rows[0]?.total_in);
+    const totalOut = n(ledgerRes.rows[0]?.total_out);
+    const donatedTotal = n(donateRes.rows[0]?.donated_total);
 
     return {
-      total_in: n(rows[0]?.total_in),
-      total_out: n(rows[0]?.total_out),
-      current_balance: n(rows[0]?.current_balance),
-      tx_count: n(rows[0]?.tx_count),
-      last_tx_at: rows[0]?.last_tx_at || null,
+      total_in: totalIn,
+      total_out: totalOut,
+      donated_total: donatedTotal,
+      current_balance: donatedTotal + totalIn - totalOut,
+      tx_count: n(ledgerRes.rows[0]?.tx_count),
+      last_tx_at: ledgerRes.rows[0]?.last_tx_at || null,
       ready: true,
     };
   },
@@ -94,16 +115,41 @@ export const CashLedgerRepo = {
     try {
       await client.query("begin");
 
-      const last = await client.query(
-        `select balance_after
-         from tb_donate_cash_ledger
-         ${guildId ? "where guild_id = $1" : ""}
-         order by created_at desc, ledger_id desc
-         limit 1`,
-        guildId ? [guildId] : [],
+      const orderWhere = [];
+      const orderValues = [];
+      if (guildId) {
+        orderValues.push(guildId);
+        orderWhere.push(`guild_id = $${orderValues.length}`);
+      }
+      orderWhere.push(`status = 'SUCCESS'`);
+
+      const donatedRes = await client.query(
+        `select coalesce(sum(amount), 0)::bigint as donated_total
+         from tb_donate_orders
+         where ${" and ".join(orderWhere)}`,
+        orderValues,
       );
 
-      const before = n(last.rows[0]?.balance_after);
+      const ledgerWhere = [];
+      const ledgerValues = [];
+      if (guildId) {
+        ledgerValues.push(guildId);
+        ledgerWhere.push(`guild_id = $${ledgerValues.length}`);
+      }
+
+      const ledgerRes = await client.query(
+        `select
+           coalesce(sum(case when txn_type = 'IN' then amount else 0 end), 0)::bigint as total_in,
+           coalesce(sum(case when txn_type = 'OUT' then amount else 0 end), 0)::bigint as total_out
+         from tb_donate_cash_ledger
+         ${ledgerWhere.length ? `where ${ledgerWhere.join(" and ")}` : ""}`,
+        ledgerValues,
+      );
+
+      const donatedTotal = n(donatedRes.rows[0]?.donated_total);
+      const totalIn = n(ledgerRes.rows[0]?.total_in);
+      const totalOut = n(ledgerRes.rows[0]?.total_out);
+      const before = donatedTotal + totalIn - totalOut;
       const after = type === "IN" ? before + amt : before - amt;
       if (type === "OUT" && after < 0) {
         throw new Error(`ยอดเงินคงเหลือไม่พอ (คงเหลือ ${before.toLocaleString("en-US")})`);
