@@ -11,6 +11,7 @@ import { cancelOrder } from "./handlers/staff.cancel.js";
 
 import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
 import { openManualInsuranceModal, addManualInsuranceFromModal } from "./handlers/admin.addInsurance.js";
+import { handleInsuranceAdminButton, handleInsuranceAdminModal } from "./handlers/admin.insuranceTools.js";
 import { handleManagePacksButton, handleManagePacksSelect, handleManagePacksModal } from "./handlers/admin.managePacks.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
@@ -94,6 +95,7 @@ export async function routeInteraction(interaction) {
       if (interaction.customId.startsWith("admin_add_insurance_modal:")) return addManualInsuranceFromModal(interaction);
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
       if (interaction.customId.startsWith("admin:packs:modal:")) return handleManagePacksModal(interaction);
+      if (interaction.customId.startsWith("admin:insurance:modal:")) return handleInsuranceAdminModal(interaction);
       return;
     }
 
@@ -113,6 +115,10 @@ export async function routeInteraction(interaction) {
           return handleManagePacksButton(interaction, {
             refreshShopPanel: () => rebuildShopPanel(interaction.client, { forceCreate: false }),
           });
+        }
+
+        if (id.startsWith("admin:insurance:")) {
+          return handleInsuranceAdminButton(interaction);
         }
 
         if (id.startsWith("admin:nav:")) {
@@ -169,11 +175,7 @@ Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>
 ระบบได้บันทึก ADMIN_DASHBOARD_MESSAGE_ID ลง DB ให้แล้ว`);
         }
 
-        if (
-          id.startsWith("admin:insurance:") ||
-          id.startsWith("admin:config:") ||
-          id.startsWith("admin:logs:")
-        ) {
+        if (id.startsWith("admin:config:") || id.startsWith("admin:logs:")) {
           return interaction.editReply("🛠️ ปุ่มนี้เปิดโครงไว้แล้ว เพื่อให้เมนูแอดมินครบและไม่กดแล้วพัง ตอนนี้ยังไม่ได้ผูก modal / query viewer เต็ม");
         }
 

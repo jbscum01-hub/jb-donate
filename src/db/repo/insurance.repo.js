@@ -48,6 +48,49 @@ export const InsuranceRepo = {
     return rows[0] ?? null;
   },
 
+
+  async getInsuranceByPlate(plate) {
+    const { rows } = await pool.query(`select * from tb_donate_vehicle_insurance where plate=$1 order by updated_at desc nulls last, created_at desc nulls last limit 1`, [plate]);
+    return rows[0] ?? null;
+  },
+
+  async listByPlate(plate) {
+    const { rows } = await pool.query(`select * from tb_donate_vehicle_insurance where plate=$1 order by updated_at desc nulls last, created_at desc nulls last`, [plate]);
+    return rows;
+  },
+
+  async cancelInsurance(plate, kind) {
+    const { rows } = await pool.query(
+      `update tb_donate_vehicle_insurance
+       set expire_at = now(),
+           updated_at = now()
+       where plate=$1 and kind=$2
+       returning *`,
+      [plate, kind]
+    );
+    return rows[0] ?? null;
+  },
+
+  async listLogsByPlate(plate, kind = null, limit = 10) {
+    const params = [plate];
+    let sql = `
+      select *
+      from tb_donate_insurance_logs
+      where plate=$1
+    `;
+
+    if (kind) {
+      params.push(kind);
+      sql += ` and kind=$2`;
+    }
+
+    params.push(Number(limit) || 10);
+    sql += ` order by created_at desc, id desc limit $${params.length}`;
+
+    const { rows } = await pool.query(sql, params);
+    return rows;
+  },
+
   async useOnce(plate, kind) {
     const { rows } = await pool.query(SQL.useVehicleInsurance, [plate, kind]);
     return rows[0] ?? null;
