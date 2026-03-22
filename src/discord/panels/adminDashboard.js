@@ -46,6 +46,7 @@ function mainNavRow(active = "dashboard") {
 function footerRow(view = "dashboard") {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("admin:nav:tools").setLabel("Panel Tools").setEmoji("🛠️").setStyle(view === "tools" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("admin:search:open").setLabel("Admin Search").setEmoji("🔎").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("admin:refresh").setLabel("Refresh").setEmoji("🔄").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("admin:vip_tick").setLabel("VIP Tick").setEmoji("👑").setStyle(ButtonStyle.Secondary),
   );
@@ -103,6 +104,12 @@ function toolsActionsRow() {
     new ButtonBuilder().setCustomId("admin:tool:refresh_shop").setLabel("Refresh Shop Panel").setEmoji("♻️").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("admin:tool:deploy_admin").setLabel("Deploy Admin Panel").setEmoji("🧰").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("admin:tool:rebuild_admin").setLabel("Rebuild Panel").setEmoji("🗂️").setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function searchActionsRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("admin:search:open").setLabel("Admin Search").setEmoji("🔎").setStyle(ButtonStyle.Primary),
   );
 }
 
@@ -369,6 +376,29 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
           fields: [
             { name: "รายการที่วางไว้", value: "📌 Recent Logs\n📦 Pack Changes\n🛡 Insurance Logs\n⚙️ Config Changes", inline: false },
             { name: "สถานะ", value: "ปุ่มในหน้านี้ใช้ดู log ล่าสุดได้แล้วแบบ ephemeral และดึงจาก DB จริง", inline: false },
+          ],
+        }),
+      ],
+      components,
+    };
+  }
+
+
+  if (view === "search") {
+    components.splice(1, 0, searchActionsRow());
+    return {
+      embeds: [
+        buildSimpleEmbed({
+          title: "🔎 Admin Search",
+          description: "ค้นหาข้อมูลแอดมินจากจุดเดียว แล้วสรุป Orders / Insurance / Audit ให้ทันที",
+          fields: [
+            { name: "ค้นหาได้จาก", value: `Order No
+Plate
+Discord ID หรือ mention
+Pack Code
+IGN / User Tag`, inline: false },
+            { name: "วิธีใช้", value: `กดปุ่ม Admin Search แล้วกรอก keyword
+Mode เว้นว่างได้ ระบบจะใช้ AUTO`, inline: false },
           ],
         }),
       ],

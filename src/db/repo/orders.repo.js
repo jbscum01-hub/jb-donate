@@ -105,4 +105,63 @@ export const OrdersRepo = {
     const { rows } = await pool.query(SQL.getOrdersTopPacks7d, [guildId, Number(limit) || 5]);
     return rows;
   },
+
+  async adminSearch(keyword, guildId = null, mode = "AUTO", limit = 6) {
+    const q = String(keyword || "").trim();
+    const upper = q.toUpperCase();
+    const values = [];
+    const where = [];
+
+    if (guildId) {
+      values.push(guildId);
+      where.push(`guild_id = $${values.length}`);
+    }
+
+    if (!q) return [];
+
+    const exactOrder = mode === "ORDER" || /^ORD[-_]?/i.test(q) || /^DN/i.test(q) || /^VIP/i.test(q) || /^BST/i.test(q);
+    const exactUser = mode === "USER" || /^\d{15,25}$/.test(q);
+    const exactPlate = mode === "PLATE";
+    const exactPack = mode === "PACK";
+
+    const or = [];
+
+    values.push(q);
+    const exactParam = `$${values.length}`;
+    values.push(`%${q}%`);
+    const likeParam = `$${values.length}`;
+    values.push(`%${upper}%`);
+    const upperLikeParam = `$${values.length}`;
+
+    if (exactOrder || mode === "AUTO") or.push(`order_no = ${exactParam}`);
+    if (exactUser || mode === "AUTO") or.push(`user_id = ${exactParam}`);
+    if (exactPack || mode === "AUTO") or.push(`upper(pack_code) like ${upperLikeParam}`);
+    if (exactPlate || mode === "AUTO") {
+      or.push(`upper(coalesce(plate,'')) like ${upperLikeParam}`);
+      or.push(`upper(coalesce(car_plate,'')) like ${upperLikeParam}`);
+      or.push(`upper(coalesce(boat_plate,'')) like ${upperLikeParam}`);
+    }
+    if (mode === "AUTO" || mode === "USER") {
+      or.push(`coalesce(user_tag,'') ilike ${likeParam}`);
+      or.push(`coalesce(ign,'') ilike ${likeParam}`);
+    }
+    if (mode === "AUTO") {
+      or.push(`coalesce(ticket_channel_id,'') = ${exactParam}`);
+      or.push(`coalesce(note,'') ilike ${likeParam}`);
+    }
+
+    where.push(`(${or.join(" or ")})`);
+    values.push(Number(limit) || 6);
+
+    const { rows } = await pool.query(
+      `select *
+       from tb_donate_orders
+       where ${where.join(" and ")}
+       order by created_at desc
+       limit $${values.length}`,
+      values,
+    );
+
+    return rows;
+  },
 };

@@ -48,7 +48,6 @@ export const InsuranceRepo = {
     return rows[0] ?? null;
   },
 
-
   async getInsuranceByPlate(plate) {
     const { rows } = await pool.query(`select * from tb_donate_vehicle_insurance where plate=$1 order by updated_at desc nulls last, created_at desc nulls last limit 1`, [plate]);
     return rows[0] ?? null;
@@ -96,6 +95,51 @@ export const InsuranceRepo = {
       `select * from tb_donate_insurance_logs order by created_at desc, id desc limit $1`,
       [Number(limit) || 12]
     );
+    return rows;
+  },
+
+  async adminSearch(keyword, mode = "AUTO", limit = 6) {
+    const q = String(keyword || "").trim();
+    const upper = q.toUpperCase();
+    if (!q) return [];
+
+    const values = [q, `%${q}%`, `%${upper}%`, Number(limit) || 6];
+    const modeUpper = String(mode || "AUTO").toUpperCase();
+
+    const where = [];
+    if (modeUpper === "PLATE") {
+      where.push(`upper(i.plate) like $3`);
+    } else if (modeUpper === "USER") {
+      where.push(`v.owner_user_id = $1 or coalesce(v.owner_tag,'') ilike $2`);
+    } else if (modeUpper === "ORDER") {
+      where.push(`coalesce(i.order_no,'') = $1 or coalesce(v.order_no,'') = $1`);
+    } else {
+      where.push(`(
+        upper(i.plate) like $3
+        or v.owner_user_id = $1
+        or coalesce(v.owner_tag,'') ilike $2
+        or coalesce(i.order_no,'') = $1
+        or coalesce(v.order_no,'') = $1
+        or coalesce(v.model,'') ilike $2
+      )`);
+    }
+
+    const { rows } = await pool.query(
+      `select
+         i.*,
+         v.owner_user_id,
+         v.owner_tag,
+         v.model,
+         v.plate_card_message_id,
+         greatest(0, coalesce(i.total,0) - coalesce(i.used,0))::int as remaining
+       from tb_donate_vehicle_insurance i
+       left join tb_donate_vehicles v on v.plate = i.plate
+       where ${where.join(" and ")}
+       order by i.updated_at desc nulls last, i.created_at desc nulls last
+       limit $4`,
+      values,
+    );
+
     return rows;
   },
 

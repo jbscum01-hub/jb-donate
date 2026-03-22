@@ -91,4 +91,57 @@ export const AuditRepo = {
     );
     return rows.map((r) => ({ ...r, meta: parseMeta(r.meta) }));
   },
+
+  async adminSearch(keyword, guildId = null, mode = "AUTO", limit = 6) {
+    const q = String(keyword || "").trim();
+    const upper = q.toUpperCase();
+    if (!q) return [];
+
+    const values = [];
+    const where = [];
+    if (guildId) {
+      values.push(guildId);
+      where.push(`guild_id = $${values.length}`);
+    }
+
+    values.push(q);
+    const exactParam = `$${values.length}`;
+    values.push(`%${q}%`);
+    const likeParam = `$${values.length}`;
+    values.push(`%${upper}%`);
+    const upperLikeParam = `$${values.length}`;
+
+    const modeUpper = String(mode || "AUTO").toUpperCase();
+    const or = [];
+    if (modeUpper === "USER") {
+      or.push(`actor_id = ${exactParam}`);
+      or.push(`coalesce(actor_tag,'') ilike ${likeParam}`);
+    } else if (modeUpper === "ORDER") {
+      or.push(`target = ${exactParam}`);
+      or.push(`coalesce(meta::text,'') ilike ${likeParam}`);
+    } else if (modeUpper === "PLATE") {
+      or.push(`upper(coalesce(target,'')) like ${upperLikeParam}`);
+      or.push(`upper(coalesce(meta::text,'')) like ${upperLikeParam}`);
+    } else {
+      or.push(`actor_id = ${exactParam}`);
+      or.push(`target = ${exactParam}`);
+      or.push(`coalesce(actor_tag,'') ilike ${likeParam}`);
+      or.push(`upper(coalesce(target,'')) like ${upperLikeParam}`);
+      or.push(`coalesce(meta::text,'') ilike ${likeParam}`);
+      or.push(`upper(coalesce(action,'')) like ${upperLikeParam}`);
+    }
+
+    where.push(`(${or.join(" or ")})`);
+    values.push(Number(limit) || 6);
+
+    const { rows } = await pool.query(
+      `select id, guild_id, actor_id, actor_tag, action, target, meta, created_at
+       from tb_donate_audit_logs
+       where ${where.join(" and ")}
+       order by created_at desc
+       limit $${values.length}`,
+      values,
+    );
+    return rows.map((r) => ({ ...r, meta: parseMeta(r.meta) }));
+  },
 };

@@ -13,6 +13,7 @@ import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
 import { openManualInsuranceModal, addManualInsuranceFromModal } from "./handlers/admin.addInsurance.js";
 import { handleInsuranceAdminButton, handleInsuranceAdminModal } from "./handlers/admin.insuranceTools.js";
 import { handleLogsAdminButton } from "./handlers/admin.logs.js";
+import { handleAdminSearchButton, handleAdminSearchModal } from "./handlers/admin.search.js";
 import { handleManagePacksButton, handleManagePacksSelect, handleManagePacksModal } from "./handlers/admin.managePacks.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
@@ -98,6 +99,7 @@ export async function routeInteraction(interaction) {
       if (interaction.customId.startsWith("set_plate_modal:")) return setPlate(interaction);
       if (interaction.customId.startsWith("admin:packs:modal:")) return handleManagePacksModal(interaction);
       if (interaction.customId.startsWith("admin:insurance:modal:")) return handleInsuranceAdminModal(interaction);
+      if (interaction.customId.startsWith("admin:search:modal:")) return handleAdminSearchModal(interaction);
       return;
     }
 
@@ -125,6 +127,10 @@ export async function routeInteraction(interaction) {
 
         if (id.startsWith("admin:logs:")) {
           return handleLogsAdminButton(interaction);
+        }
+
+        if (id.startsWith("admin:search:")) {
+          return handleAdminSearchButton(interaction);
         }
 
         if (id.startsWith("admin:nav:")) {
