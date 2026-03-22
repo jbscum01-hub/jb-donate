@@ -119,6 +119,18 @@ function buildCashModal(kind) {
           .setRequired(false)
           .setPlaceholder("ถ้ามี")
       ),
+      ...(isOut
+        ? [
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId("image_url")
+                .setLabel("ลิงก์รูปหลักฐาน (ไม่บังคับ)")
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+                .setPlaceholder("https://...")
+            ),
+          ]
+        : []),
     );
 }
 
@@ -165,6 +177,9 @@ export async function handleCashModal(interaction) {
   const amountRaw = interaction.fields.getTextInputValue("amount");
   const reason = interaction.fields.getTextInputValue("reason");
   const note = interaction.fields.getTextInputValue("note") || null;
+  const imageUrl = kind === "out"
+    ? (interaction.fields.getTextInputValue("image_url") || "").trim() || null
+    : null;
   const amount = Number(String(amountRaw || "").replace(/,/g, "").trim());
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
@@ -175,6 +190,7 @@ export async function handleCashModal(interaction) {
     amount,
     reason,
     note,
+    imageUrl,
     actorId: interaction.user.id,
     actorTag: interaction.user.tag ?? interaction.user.username,
   });
@@ -190,6 +206,7 @@ export async function handleCashModal(interaction) {
       balance_after: Number(row.balance_after || 0),
       reason,
       note,
+      image_url: imageUrl,
     },
   });
 
@@ -204,6 +221,10 @@ export async function handleCashModal(interaction) {
       { name: "หมายเหตุ", value: note || "-", inline: false },
     )
     .setFooter({ text: `บันทึกเมื่อ ${fmtDateTH(row.created_at || new Date())}` });
+
+  if (imageUrl) {
+    result.setImage(imageUrl);
+  }
 
   return safeReply(interaction, { embeds: [result], ephemeral: true });
 }

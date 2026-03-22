@@ -17,6 +17,21 @@ async function tableExists() {
   return Boolean(rows[0]?.ok);
 }
 
+
+async function hasColumn(columnName) {
+  const { rows } = await pool.query(
+    `select exists (
+       select 1
+       from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'tb_donate_cash_ledger'
+         and column_name = $1
+     ) as ok`,
+    [columnName],
+  );
+  return Boolean(rows[0]?.ok);
+}
+
 export const CashLedgerRepo = {
   async isReady() {
     try {
@@ -61,7 +76,7 @@ export const CashLedgerRepo = {
     };
   },
 
-  async addEntry({ guildId = null, txnType, amount, reason, note = null, actorId = null, actorTag = null }) {
+  async addEntry({ guildId = null, txnType, amount, reason, note = null, imageUrl = null, actorId = null, actorTag = null }) {
     if (!(await this.isReady())) {
       throw new Error("tb_donate_cash_ledger table not found");
     }
@@ -94,22 +109,41 @@ export const CashLedgerRepo = {
         throw new Error(`ยอดเงินคงเหลือไม่พอ (คงเหลือ ${before.toLocaleString("en-US")})`);
       }
 
-      const ins = await client.query(
-        `insert into tb_donate_cash_ledger
-         (
-           guild_id,
-           txn_type,
-           amount,
-           balance_after,
-           reason,
-           note,
-           actor_id,
-           actor_tag
-         )
-         values ($1,$2,$3,$4,$5,$6,$7,$8)
-         returning *`,
-        [guildId, type, amt, after, cleanReason, note || null, actorId, actorTag],
-      );
+      const supportsImage = await hasColumn("image_url");
+      const ins = supportsImage
+        ? await client.query(
+            `insert into tb_donate_cash_ledger
+             (
+               guild_id,
+               txn_type,
+               amount,
+               balance_after,
+               reason,
+               note,
+               image_url,
+               actor_id,
+               actor_tag
+             )
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             returning *`,
+            [guildId, type, amt, after, cleanReason, note || null, imageUrl || null, actorId, actorTag],
+          )
+        : await client.query(
+            `insert into tb_donate_cash_ledger
+             (
+               guild_id,
+               txn_type,
+               amount,
+               balance_after,
+               reason,
+               note,
+               actor_id,
+               actor_tag
+             )
+             values ($1,$2,$3,$4,$5,$6,$7,$8)
+             returning *`,
+            [guildId, type, amt, after, cleanReason, note || null, actorId, actorTag],
+          );
 
       await client.query("commit");
       return ins.rows[0];
@@ -124,6 +158,7 @@ export const CashLedgerRepo = {
   async listRecent(guildId = null, limit = 10) {
     if (!(await this.isReady())) return [];
 
+    const supportsImage = await hasColumn("image_url");
     const values = [];
     const where = [];
     if (guildId) {
@@ -132,9 +167,10 @@ export const CashLedgerRepo = {
     }
     values.push(Number(limit) || 10);
     const whereSql = where.length ? `where ${where.join(" and ")}` : "";
+    const imageSelect = supportsImage ? "image_url" : "null::text as image_url";
 
     const { rows } = await pool.query(
-      `select ledger_id, guild_id, txn_type, amount, balance_after, reason, note, actor_id, actor_tag, created_at
+      `select ledger_id, guild_id, txn_type, amount, balance_after, reason, note, ${imageSelect}, actor_id, actor_tag, created_at
        from tb_donate_cash_ledger
        ${whereSql}
        order by created_at desc, ledger_id desc

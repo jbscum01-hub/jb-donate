@@ -8,10 +8,13 @@ CREATE TABLE IF NOT EXISTS public.tb_donate_cash_ledger (
   balance_after BIGINT NOT NULL,
   reason VARCHAR(200) NOT NULL,
   note TEXT,
+  image_url TEXT,
   actor_id VARCHAR(32),
   actor_tag VARCHAR(120),
   created_at TIMESTAMP NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.tb_donate_cash_ledger ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_donate_cash_ledger_guild_created
   ON public.tb_donate_cash_ledger (guild_id, created_at DESC);
