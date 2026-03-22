@@ -1,5 +1,5 @@
 import { MessageFlags } from "discord.js";
-import { openOrderModal } from "./handlers/shop.select.js";
+import { openOrderModal, previewShopPack } from "./handlers/shop.select.js";
 import { createOrderFromModal } from "./handlers/order.modal.js";
 import { handleTicketVehicleSelect } from "./handlers/ticket.vehicle.select.js";
 
@@ -83,7 +83,7 @@ async function deployAdminPanel(client) {
 export async function routeInteraction(interaction) {
   try {
     if (interaction.isStringSelectMenu()) {
-      if (interaction.customId === "shop_select") return openOrderModal(interaction);
+      if (interaction.customId === "shop_select") return previewShopPack(interaction);
       if (interaction.customId.startsWith("ticket_model_select:")) return handleTicketVehicleSelect(interaction);
       if (interaction.customId.startsWith("admin:packs:select:")) return handleManagePacksSelect(interaction);
       return;
@@ -178,6 +178,11 @@ Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>
         }
 
         return interaction.editReply("ℹ️ Admin action not implemented yet");
+      }
+
+      if (id.startsWith("shop:buy:")) {
+        const [, , type, code] = id.split(":");
+        return openOrderModal(interaction, `${type}:${code}`);
       }
 
       if (isStaffActionId(id, "approve")) return approveOrder(interaction);

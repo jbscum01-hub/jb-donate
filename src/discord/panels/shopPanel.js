@@ -101,8 +101,14 @@ export async function buildShopPanel() {
       value: "DISABLED:NO_PACKS",
     });
   } else {
+    select.addOptions({
+      label: "— เลือกแพ็ก —",
+      description: "เลือกเพื่อดูรายละเอียดก่อนซื้อ",
+      value: "__empty__",
+    });
+
     select.addOptions(
-      packs.slice(0, 25).map((pack) => ({
+      packs.slice(0, 24).map((pack) => ({
         label: `${iconForPack(pack.pack_code)} ${pack.pack_code}`.slice(0, 100),
         description: `${money(pack.price)} • ${pack.pack_name}`.slice(0, 100),
         value: `${pack.pack_type}:${pack.pack_code}`,

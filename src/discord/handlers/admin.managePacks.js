@@ -44,6 +44,14 @@ function parseSortOrder(v, fallback = 0) {
   return Math.floor(n);
 }
 
+function parseEmbedColor(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  const clean = s.replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return null;
+  return parseInt(clean, 16);
+}
+
 function previewEmbed(pack, details = null) {
   const d = details || pack;
   const lines = [];
@@ -90,12 +98,18 @@ function previewEmbed(pack, details = null) {
     });
   }
 
-  return new EmbedBuilder()
-    .setColor(d.is_active ? 0x1f8b4c : 0x5865f2)
+  const embed = new EmbedBuilder()
+    .setColor(d.embed_color ?? (d.is_active ? 0x1f8b4c : 0x5865f2))
     .setTitle(`📦 ${d.pack_name}`)
     .setDescription(lines.join("\n").slice(0, 4096) || "-")
     .addFields(fields)
     .setFooter({ text: `Pack ID: ${d.pack_id}` });
+
+  if (d.image_url) {
+    embed.setImage(d.image_url);
+  }
+
+  return embed;
 }
 
 async function replyWithPackSelector(interaction, mode) {
@@ -120,6 +134,7 @@ async function replyWithPackSelector(interaction, mode) {
     preview: "เลือกแพ็กที่ต้องการดูรายละเอียด",
     toggle: "เลือกแพ็กที่ต้องการเปิด/ปิด",
     contents: "เลือกแพ็กที่ต้องการแก้เนื้อหา",
+    image: "เลือกแพ็กที่ต้องการแก้รูป/สี",
   };
 
   return interaction.editReply({
@@ -174,6 +189,35 @@ function buildCreateModal() {
     new ActionRowBuilder().addComponents(type),
     new ActionRowBuilder().addComponents(price),
     new ActionRowBuilder().addComponents(desc)
+  );
+
+  return modal;
+}
+
+function buildImageModal(pack) {
+  const modal = new ModalBuilder()
+    .setCustomId(`admin:packs:modal:image:${pack.pack_id}`)
+    .setTitle(`Image ${pack.pack_code}`);
+
+  const imageUrl = new TextInputBuilder()
+    .setCustomId("image_url")
+    .setLabel("Image URL")
+    .setRequired(false)
+    .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder("https://...")
+    .setValue(String(pack.image_url || "").slice(0, 4000));
+
+  const embedColor = new TextInputBuilder()
+    .setCustomId("embed_color")
+    .setLabel("Embed Color (#RRGGBB)")
+    .setRequired(false)
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder("เช่น #FFD700")
+    .setValue(pack.embed_color != null ? `#${Number(pack.embed_color).toString(16).padStart(6, "0")}` : "");
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(imageUrl),
+    new ActionRowBuilder().addComponents(embedColor)
   );
 
   return modal;
@@ -306,6 +350,9 @@ function buildContentButtons(packId) {
       new ButtonBuilder().setCustomId(`admin:packs:contents:vehicles:${packId}`).setLabel("Vehicles").setEmoji("🚗").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`admin:packs:contents:boats:${packId}`).setLabel("Boats").setEmoji("🛥️").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`admin:packs:contents:preview:${packId}`).setLabel("Refresh Preview").setEmoji("👁️").setStyle(ButtonStyle.Primary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin:packs:contents:image:${packId}`).setLabel("Image / Color").setEmoji("🖼️").setStyle(ButtonStyle.Secondary),
     ),
   ];
 }
@@ -463,6 +510,11 @@ export async function handleManagePacksButton(interaction, { refreshShopPanel } 
     return replyWithPackSelector(interaction, "preview");
   }
 
+  if (id === "admin:packs:image") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    return replyWithPackSelector(interaction, "image");
+  }
+
   if (id === "admin:packs:toggle") {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
     return replyWithPackSelector(interaction, "toggle");
@@ -476,6 +528,14 @@ export async function handleManagePacksButton(interaction, { refreshShopPanel } 
 
   if (id.startsWith("admin:packs:contents:")) {
     const [, , , kind, packId] = id.split(":");
+    if (kind === "image") {
+      const details = await DonatePackRepo.getPackDetailsById(packId);
+      if (!details) {
+        return interaction.reply({ content: "❌ ไม่พบแพ็กนี้ในระบบ", flags: MessageFlags.Ephemeral }).catch(() => {});
+      }
+      return interaction.showModal(buildImageModal(details));
+    }
+
     if (kind === "preview") {
       const details = await DonatePackRepo.getPackDetailsById(packId);
       if (!details) {
@@ -525,6 +585,11 @@ export async function handleManagePacksSelect(interaction) {
       embeds: [previewEmbed(pack, details), contentsHelpEmbed(pack, details)],
       components: buildContentButtons(pack.pack_id),
     }).catch(() => {});
+    return true;
+  }
+
+  if (mode === "image") {
+    await interaction.showModal(buildImageModal(pack));
     return true;
   }
 
@@ -619,6 +684,49 @@ export async function handleManagePacksModal(interaction) {
     await interaction.editReply({
       content: `✅ สร้างแพ็ก ${created.pack_code} เรียบร้อยแล้ว`,
       embeds: [previewEmbed(created)],
+    }).catch(() => {});
+    return true;
+  }
+
+  if (id.startsWith("admin:packs:modal:image:")) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    const packId = id.split(":")[4];
+    const current = await DonatePackRepo.getPackById(packId);
+    if (!current) {
+      await interaction.editReply("❌ ไม่พบแพ็กนี้ในระบบ").catch(() => {});
+      return true;
+    }
+
+    const image_url = trimOrNull(interaction.fields.getTextInputValue("image_url"));
+    const embedColorRaw = trimOrNull(interaction.fields.getTextInputValue("embed_color"));
+    const embed_color = parseEmbedColor(embedColorRaw);
+    if (embedColorRaw && embed_color == null) {
+      await interaction.editReply("❌ Embed Color ต้องเป็นรูปแบบ #RRGGBB เช่น #FFD700").catch(() => {});
+      return true;
+    }
+
+    const updated = await DonatePackRepo.updatePack(packId, {
+      image_url,
+      embed_color,
+      updated_by: actorTag(interaction.user),
+    });
+
+    await AuditRepo.add({
+      guildId: interaction.guildId,
+      actorId: interaction.user.id,
+      actorTag: actorTag(interaction.user),
+      action: "PACK_IMAGE_UPDATE",
+      target: updated?.pack_code || current.pack_code,
+      meta: {
+        pack_id: packId,
+        image_url: updated?.image_url || null,
+        embed_color: updated?.embed_color ?? null,
+      },
+    }).catch(() => {});
+
+    await interaction.editReply({
+      content: "✅ บันทึกรูป/สีของแพ็กแล้ว",
+      embeds: [previewEmbed(updated, updated)],
     }).catch(() => {});
     return true;
   }

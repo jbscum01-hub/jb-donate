@@ -245,6 +245,8 @@ export const DonatePackRepo = {
          vip_days,
          discord_role_id,
          discord_role_name,
+         image_url,
+         embed_color,
          created_at,
          updated_at,
          created_by,
@@ -336,6 +338,8 @@ export const DonatePackRepo = {
     sort_order = 0,
     created_by = null,
     updated_by = null,
+    image_url = null,
+    embed_color = null,
   }) {
     const payload = {
       pack_code: normalizeText(pack_code).toUpperCase(),
@@ -347,6 +351,8 @@ export const DonatePackRepo = {
       sort_order: normalizeInt(sort_order, 0),
       created_by: normalizeNullableText(created_by),
       updated_by: normalizeNullableText(updated_by),
+      image_url: normalizeNullableText(image_url),
+      embed_color: embed_color == null || String(embed_color).trim() === "" ? null : normalizeInt(embed_color, 0),
     };
 
     const { rows } = await pool.query(
@@ -374,6 +380,8 @@ export const DonatePackRepo = {
         payload.sort_order,
         payload.created_by,
         payload.updated_by,
+        payload.image_url,
+        payload.embed_color,
       ]
     );
 
@@ -393,6 +401,11 @@ export const DonatePackRepo = {
       panel_summary: normalizeNullableText(patch.panel_summary ?? current.panel_summary),
       sort_order: normalizeInt(patch.sort_order ?? current.sort_order, 0),
       updated_by: normalizeNullableText(patch.updated_by ?? current.updated_by),
+      image_url: normalizeNullableText(patch.image_url ?? current.image_url),
+      embed_color:
+        patch.embed_color == null || String(patch.embed_color).trim() === ""
+          ? (current.embed_color == null ? null : normalizeInt(current.embed_color, 0))
+          : normalizeInt(patch.embed_color, 0),
     };
 
     const { rows } = await pool.query(
@@ -419,6 +432,8 @@ export const DonatePackRepo = {
         next.panel_summary,
         next.sort_order,
         next.updated_by,
+        next.image_url,
+        next.embed_color,
       ]
     );
 

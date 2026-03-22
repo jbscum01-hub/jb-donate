@@ -56,8 +56,15 @@ function packsActionsRow() {
     new ButtonBuilder().setCustomId("admin:packs:create").setLabel("Create Pack").setEmoji("➕").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("admin:packs:edit").setLabel("Edit Pack").setEmoji("✏️").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("admin:packs:edit_contents").setLabel("Edit Contents").setEmoji("🧩").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("admin:packs:preview").setLabel("Preview Pack").setEmoji("👁️").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("admin:packs:image").setLabel("Image / Color").setEmoji("🖼️").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("admin:packs:toggle").setLabel("Enable / Disable").setEmoji("✅").setStyle(ButtonStyle.Secondary),
+  );
+}
+
+function packsToolsRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("admin:packs:preview").setLabel("Preview Pack").setEmoji("👁️").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("admin:packs:refresh").setLabel("Refresh Shop").setEmoji("♻️").setStyle(ButtonStyle.Secondary),
   );
 }
 
@@ -302,7 +309,7 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
   }
 
   if (view === "packs") {
-    components.splice(1, 0, packsActionsRow());
+    components.splice(1, 0, packsActionsRow(), packsToolsRow());
     return {
       embeds: [
         buildSimpleEmbed({
