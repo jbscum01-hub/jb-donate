@@ -91,9 +91,10 @@ function buildCashHistoryEmbed(rows, summary) {
 
 function buildCashModal(kind) {
   const isOut = kind === "out";
+  const isSet = kind === "set_balance";
   return new ModalBuilder()
     .setCustomId(`admin:cash:modal:${kind}`)
-    .setTitle(isOut ? "เบิกเงินออก" : "เพิ่มเงินเข้า")
+    .setTitle(isSet ? "ตั้งยอดปัจจุบัน" : (isOut ? "เบิกเงินออก" : "เพิ่มเงินเข้า"))
     .addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
@@ -109,7 +110,7 @@ function buildCashModal(kind) {
           .setLabel("เหตุผล")
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
-          .setPlaceholder(isOut ? "เช่น ค่าใช้จ่ายเซิร์ฟเวอร์" : "เช่น ปรับยอดเริ่มต้น")
+          .setPlaceholder(isSet ? "เช่น ตั้งยอดเริ่มต้น / ปรับให้ตรงเงินจริง" : (isOut ? "เช่น ค่าใช้จ่ายเซิร์ฟเวอร์" : "เช่น เติมเงินเข้าระบบจริง"))
       ),
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
@@ -164,6 +165,61 @@ export async function handleCashButton(interaction) {
   if (id === "admin:cash:withdraw") {
     return interaction.showModal(buildCashModal("out"));
   }
+
+  if (id === "admin:cash:set_balance") {
+    return interaction.showModal(buildCashModal("set_balance"));
+  }
+
+  if (id === "admin:cash:sync_donate") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    const summary = await getCashSummary(interaction.guildId);
+    if (!summary.ledgerReady) {
+      return safeReply(interaction, { content: "❌ ยังไม่พบตาราง cash ledger — รัน scripts/create_cash_ledger.sql ก่อน", ephemeral: true });
+    }
+
+    const target = summary.donated;
+    const diff = target - summary.balance;
+    if (diff === 0) {
+      return safeReply(interaction, { content: `ℹ️ ยอดปัจจุบันตรงกับยอดโดเนทสำเร็จอยู่แล้ว (**${fmtMoney(target)}**)`, ephemeral: true });
+    }
+
+    const row = await CashLedgerRepo.addEntry({
+      guildId: interaction.guildId,
+      txnType: diff > 0 ? "IN" : "OUT",
+      amount: Math.abs(diff),
+      reason: "ซิงก์ยอดตามโดเนทสำเร็จ",
+      note: `target=${target}; donated=${summary.donated}; before=${summary.balance}`,
+      actorId: interaction.user.id,
+      actorTag: interaction.user.tag ?? interaction.user.username,
+    });
+
+    await AuditRepo.add({
+      guildId: interaction.guildId,
+      actorId: interaction.user.id,
+      actorTag: interaction.user.tag ?? interaction.user.username,
+      action: "CASH_SYNC_DONATE",
+      target: String(row.ledger_id),
+      meta: {
+        target_balance: target,
+        donated: summary.donated,
+        before_balance: summary.balance,
+        after_balance: row.balance_after,
+        diff,
+      },
+    });
+
+    const result = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle("🔄 ซิงก์ยอดตามโดเนทสำเร็จแล้ว")
+      .addFields(
+        { name: "ยอดโดเนทสำเร็จ", value: `**${fmtMoney(summary.donated)}**`, inline: true },
+        { name: "ยอดก่อนซิงก์", value: `**${fmtMoney(summary.balance)}**`, inline: true },
+        { name: "ยอดหลังซิงก์", value: `**${fmtMoney(row.balance_after)}**`, inline: true },
+      )
+      .setFooter({ text: `บันทึกเมื่อ ${fmtDateTH(row.created_at || new Date())}` });
+
+    return safeReply(interaction, { embeds: [result], ephemeral: true });
+  }
 }
 
 export async function handleCashModal(interaction) {
@@ -183,6 +239,63 @@ export async function handleCashModal(interaction) {
   const amount = Number(String(amountRaw || "").replace(/,/g, "").trim());
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
+  if (kind === "set_balance") {
+    const target = Math.trunc(amount);
+    if (!Number.isFinite(target) || target < 0) {
+      throw new Error("ยอดเป้าหมายต้องเป็น 0 หรือมากกว่า");
+    }
+
+    const summary = await getCashSummary(interaction.guildId);
+    if (!summary.ledgerReady) {
+      throw new Error("ยังไม่พบตาราง cash ledger — รัน scripts/create_cash_ledger.sql ก่อน");
+    }
+
+    const diff = target - summary.balance;
+    if (diff === 0) {
+      return safeReply(interaction, { content: `ℹ️ ยอดปัจจุบันเท่ากับ **${fmtMoney(target)}** อยู่แล้ว`, ephemeral: true });
+    }
+
+    const row = await CashLedgerRepo.addEntry({
+      guildId: interaction.guildId,
+      txnType: diff > 0 ? "IN" : "OUT",
+      amount: Math.abs(diff),
+      reason: reason || "ตั้งยอดปัจจุบัน",
+      note: [note, `target=${target}`, `before=${summary.balance}`].filter(Boolean).join(" | "),
+      actorId: interaction.user.id,
+      actorTag: interaction.user.tag ?? interaction.user.username,
+    });
+
+    await AuditRepo.add({
+      guildId: interaction.guildId,
+      actorId: interaction.user.id,
+      actorTag: interaction.user.tag ?? interaction.user.username,
+      action: "CASH_SET_BALANCE",
+      target: String(row.ledger_id),
+      meta: {
+        target_balance: target,
+        before_balance: summary.balance,
+        after_balance: row.balance_after,
+        diff,
+        reason,
+        note,
+      },
+    });
+
+    const result = new EmbedBuilder()
+      .setColor(0x9b59b6)
+      .setTitle("🎯 ตั้งยอดปัจจุบันสำเร็จ")
+      .addFields(
+        { name: "ยอดก่อนปรับ", value: `**${fmtMoney(summary.balance)}**`, inline: true },
+        { name: "ยอดเป้าหมาย", value: `**${fmtMoney(target)}**`, inline: true },
+        { name: "ส่วนต่างที่ปรับ", value: `**${diff > 0 ? "+" : "-"}${fmtMoney(Math.abs(diff))}**`, inline: true },
+        { name: "เหตุผล", value: String(reason || "-"), inline: false },
+        { name: "หมายเหตุ", value: note || "-", inline: false },
+      )
+      .setFooter({ text: `บันทึกเมื่อ ${fmtDateTH(row.created_at || new Date())}` });
+
+    return safeReply(interaction, { embeds: [result], ephemeral: true });
+  }
 
   const row = await CashLedgerRepo.addEntry({
     guildId: interaction.guildId,

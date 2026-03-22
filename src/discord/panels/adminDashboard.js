@@ -123,6 +123,13 @@ function cashActionsRow() {
   );
 }
 
+function cashAdjustRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("admin:cash:set_balance").setLabel("ตั้งยอดปัจจุบัน").setEmoji("🎯").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("admin:cash:sync_donate").setLabel("ซิงก์ตามยอดโดเนท").setEmoji("🔄").setStyle(ButtonStyle.Secondary),
+  );
+}
+
 export async function buildAdminDashboardSnapshot(client) {
   const data = {
     totalAmount: 0,
@@ -335,7 +342,7 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
   const components = [mainNavRow(view), footerRow(view)];
 
   if (view === "dashboard") {
-    components.splice(1, 0, cashActionsRow());
+    components.splice(1, 0, cashActionsRow(), cashAdjustRow());
     const snapshot = await buildAdminDashboardSnapshot(client);
     return { embeds: [buildDashboardEmbed(snapshot)], components };
   }
