@@ -120,6 +120,7 @@ function cashActionsRow() {
     new ButtonBuilder().setCustomId("admin:cash:add").setLabel("เพิ่มเงินเข้า").setEmoji("➕").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("admin:cash:withdraw").setLabel("เบิกเงินออก").setEmoji("➖").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId("admin:cash:history").setLabel("ประวัติการเงิน").setEmoji("📜").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("admin:cash:export").setLabel("ส่งออกรายงานเงิน").setEmoji("📤").setStyle(ButtonStyle.Secondary),
   );
 }
 
@@ -151,7 +152,8 @@ export async function buildAdminDashboardSnapshot(client) {
     vip: { active: 0, expiring_24h: 0, expiring_3d: 0, due_grants: 0, expired: 0 },
     vipExpiringSoon: [],
     insurance: { active: 0, expiring_24h: 0, expiring_3d: 0, exhausted: 0, expired: 0, soon: [] },
-    cash: { donated: 0, manualIn: 0, withdrawn: 0, balance: 0, txCount: 0, lastTxAt: null, ready: false },
+    cash: { donated: 0, manualIn: 0, withdrawn: 0, balance: 0, txCount: 0, lastTxAt: null, ready: false, donate7d: 0, donate30d: 0, in7d: 0, out7d: 0, in30d: 0, out30d: 0 },
+    trend: { amount7d: 0, orders7d: 0, amount30d: 0, orders30d: 0, avgOrderAmount: 0, lastSuccessAt: null },
     notes: [],
   };
 
@@ -188,11 +190,23 @@ export async function buildAdminDashboardSnapshot(client) {
       data.oldestPendingTH = ex.oldest_pending_th || null;
       data.recentOrders = await OrdersRepo.getRecent(ENV.GUILD_ID, 5);
       data.topPacks7d = await OrdersRepo.getTopPacks7d(ENV.GUILD_ID, 5);
+      const trend = await OrdersRepo.getWindowStats(ENV.GUILD_ID);
+      data.trend = {
+        amount7d: n(trend.amount_7d),
+        orders7d: n(trend.orders_7d),
+        amount30d: n(trend.amount_30d),
+        orders30d: n(trend.orders_30d),
+        avgOrderAmount: n(trend.avg_order_amount),
+        lastSuccessAt: trend.last_success_th || null,
+      };
       data.vip = await VipRepo.getDashboardStats(ENV.GUILD_ID);
       data.vipExpiringSoon = await VipRepo.listExpiringSoon(ENV.GUILD_ID, 24, 5);
       data.insurance = await InsuranceRepo.getDashboardStats(5);
       data.queueCount = await OrdersRepo.getOpenQueueCount(ENV.GUILD_ID);
-      const cash = await CashLedgerRepo.getSummary(ENV.GUILD_ID);
+      const [cash, cashWindow] = await Promise.all([
+        CashLedgerRepo.getSummary(ENV.GUILD_ID),
+        CashLedgerRepo.getWindowStats(ENV.GUILD_ID),
+      ]);
       data.cash = {
         donated: data.totalAmount,
         manualIn: n(cash.total_in),
@@ -201,6 +215,12 @@ export async function buildAdminDashboardSnapshot(client) {
         txCount: n(cash.tx_count),
         lastTxAt: cash.last_tx_at || null,
         ready: Boolean(cash.ready),
+        donate7d: data.trend.amount7d,
+        donate30d: data.trend.amount30d,
+        in7d: n(cashWindow.in_7d),
+        out7d: n(cashWindow.out_7d),
+        in30d: n(cashWindow.in_30d),
+        out30d: n(cashWindow.out_30d),
       };
       if (!cash.ready) {
         data.notes.push("ℹ️ Cash ledger ยังไม่พร้อม — รัน scripts/create_cash_ledger.sql ก่อนเพื่อใช้ปุ่มการเงินใหม่");

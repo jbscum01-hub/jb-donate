@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   EmbedBuilder,
   MessageFlags,
   ModalBuilder,
@@ -32,9 +33,11 @@ function fmtDateTH(v) {
 }
 
 async function getCashSummary(guildId) {
-  const [orderStats, cashSummary] = await Promise.all([
+  const [orderStats, orderWindow, cashSummary, cashWindow] = await Promise.all([
     OrdersRepo.getDashboardStats(guildId),
+    OrdersRepo.getWindowStats(guildId),
     CashLedgerRepo.getSummary(guildId),
+    CashLedgerRepo.getWindowStats(guildId),
   ]);
 
   return {
@@ -45,6 +48,16 @@ async function getCashSummary(guildId) {
     txCount: n(cashSummary?.tx_count),
     lastTxAt: cashSummary?.last_tx_at || null,
     ledgerReady: Boolean(cashSummary?.ready),
+    donate7d: n(orderWindow?.amount_7d),
+    orders7d: n(orderWindow?.orders_7d),
+    donate30d: n(orderWindow?.amount_30d),
+    orders30d: n(orderWindow?.orders_30d),
+    avgOrder: n(orderWindow?.avg_order_amount),
+    lastSuccessAt: orderWindow?.last_success_th || null,
+    in7d: n(cashWindow?.in_7d),
+    out7d: n(cashWindow?.out_7d),
+    in30d: n(cashWindow?.in_30d),
+    out30d: n(cashWindow?.out_30d),
   };
 }
 
@@ -62,6 +75,12 @@ function buildCashSummaryEmbed(summary) {
       { name: "เพิ่มเงินเข้า", value: `**${fmtMoney(summary.manualIn)}**`, inline: true },
       { name: "เบิกเงินออก", value: `**${fmtMoney(summary.withdrawn)}**`, inline: true },
       { name: "ยอดคงเหลือ", value: `**${fmtMoney(summary.balance)}**`, inline: true },
+      { name: "โดเนท 7 วัน", value: `**${fmtMoney(summary.donate7d)}** (${fmtMoney(summary.orders7d)} รายการ)`, inline: true },
+      { name: "เงินเข้า/ออก 7 วัน", value: `+${fmtMoney(summary.in7d)} / -${fmtMoney(summary.out7d)}`, inline: true },
+      { name: "โดเนท 30 วัน", value: `**${fmtMoney(summary.donate30d)}** (${fmtMoney(summary.orders30d)} รายการ)`, inline: true },
+      { name: "เงินเข้า/ออก 30 วัน", value: `+${fmtMoney(summary.in30d)} / -${fmtMoney(summary.out30d)}`, inline: true },
+      { name: "ค่าเฉลี่ยต่อออเดอร์", value: `**${fmtMoney(summary.avgOrder)}**`, inline: true },
+      { name: "โดเนทล่าสุด", value: `**${fmtDateTH(summary.lastSuccessAt)}**`, inline: true },
       { name: "สถานะ", value: note, inline: false },
     )
     .setFooter({ text: `Updated ${fmtDateTH(new Date())}` });
@@ -83,6 +102,48 @@ function buildCashHistoryEmbed(rows, summary) {
     .setTitle("📜 ประวัติการเงิน")
     .setDescription(desc)
     .setFooter({ text: `ยอดคงเหลือปัจจุบัน ${fmtMoney(summary.balance)}` });
+}
+
+
+function csvEscape(v) {
+  const s = String(v ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function buildCashCsv(rows) {
+  const headers = [
+    "ledger_id",
+    "guild_id",
+    "txn_type",
+    "amount",
+    "balance_after",
+    "reason",
+    "note",
+    "image_url",
+    "actor_id",
+    "actor_tag",
+    "created_at",
+  ];
+
+  const lines = [headers.join(",")];
+  for (const r of rows) {
+    lines.push([
+      r.ledger_id,
+      r.guild_id,
+      r.txn_type,
+      r.amount,
+      r.balance_after,
+      r.reason,
+      r.note,
+      r.image_url,
+      r.actor_id,
+      r.actor_tag,
+      r.created_at ? new Date(r.created_at).toISOString() : "",
+    ].map(csvEscape).join(","));
+  }
+
+  return Buffer.from(lines.join("\n"), "utf8");
 }
 
 function buildCashModal(kind) {
@@ -154,6 +215,25 @@ export async function handleCashButton(interaction) {
       CashLedgerRepo.listRecent(interaction.guildId, 10),
     ]);
     return safeReply(interaction, { embeds: [buildCashHistoryEmbed(rows, summary)], ephemeral: true });
+  }
+
+  if (id === "admin:cash:export") {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    const [summary, rows] = await Promise.all([
+      getCashSummary(interaction.guildId),
+      CashLedgerRepo.exportRows(interaction.guildId, 500),
+    ]);
+    const file = new AttachmentBuilder(buildCashCsv(rows), { name: `cash-ledger-${interaction.guildId || "global"}.csv` });
+    const embed = new EmbedBuilder()
+      .setColor(0x8e44ad)
+      .setTitle("📤 ส่งออกรายงานเงิน")
+      .setDescription(`แนบไฟล์ CSV รายการล่าสุด ${fmtMoney(rows.length)} รายการ`)
+      .addFields(
+        { name: "ยอดคงเหลือปัจจุบัน", value: `**${fmtMoney(summary.balance)}**`, inline: true },
+        { name: "ยอดโดเนทรวม", value: `**${fmtMoney(summary.donated)}**`, inline: true },
+        { name: "เงินเข้า / เงินออก", value: `+${fmtMoney(summary.manualIn)} / -${fmtMoney(summary.withdrawn)}`, inline: true },
+      );
+    return safeReply(interaction, { embeds: [embed], files: [file], ephemeral: true });
   }
 
   if (id === "admin:cash:add") {

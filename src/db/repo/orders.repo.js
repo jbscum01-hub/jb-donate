@@ -101,6 +101,37 @@ export const OrdersRepo = {
     return rows;
   },
 
+
+
+  async getWindowStats(guildId) {
+    const { rows } = await pool.query(
+      `with base as (
+         select o.*,
+                (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') as created_th
+         from tb_donate_orders o
+         where o.guild_id = $1
+           and o.status = 'SUCCESS'
+       )
+       select
+         coalesce(sum(case when created_at >= now() - interval '7 days' then amount else 0 end), 0)::bigint as amount_7d,
+         count(case when created_at >= now() - interval '7 days' then 1 end)::bigint as orders_7d,
+         coalesce(sum(case when created_at >= now() - interval '30 days' then amount else 0 end), 0)::bigint as amount_30d,
+         count(case when created_at >= now() - interval '30 days' then 1 end)::bigint as orders_30d,
+         coalesce(avg(amount), 0)::numeric(18,2) as avg_order_amount,
+         max(created_th) as last_success_th
+       from base`,
+      [guildId],
+    );
+    return rows[0] ?? {
+      amount_7d: 0,
+      orders_7d: 0,
+      amount_30d: 0,
+      orders_30d: 0,
+      avg_order_amount: 0,
+      last_success_th: null,
+    };
+  },
+
   async getTopPacks7d(guildId, limit = 5) {
     const { rows } = await pool.query(SQL.getOrdersTopPacks7d, [guildId, Number(limit) || 5]);
     return rows;
