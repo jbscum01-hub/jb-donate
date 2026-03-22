@@ -211,9 +211,10 @@ function buildEditModal(pack) {
 
   const summary = new TextInputBuilder()
     .setCustomId("summary")
-    .setLabel("Summary | Sort (สรุปแพ็ก และ sort ใส่บรรทัดสุดท้ายเป็น sort=10)")
+    .setLabel("Summary + Sort")
     .setRequired(false)
     .setStyle(TextInputStyle.Paragraph)
+    .setPlaceholder("บรรทัดสุดท้ายใส่ sort=10")
     .setValue(`${pack.panel_summary || pack.description || ""}${pack.sort_order != null ? `\nsort=${pack.sort_order}` : ""}`.slice(0, 4000));
 
   modal.addComponents(
