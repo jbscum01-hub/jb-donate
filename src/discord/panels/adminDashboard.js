@@ -368,7 +368,7 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
           description: "หน้าดูย้อนหลังของระบบ โดยอิง tb_donate_audit_logs และ log ตารางย่อยของ donate",
           fields: [
             { name: "รายการที่วางไว้", value: "📌 Recent Logs\n📦 Pack Changes\n🛡 Insurance Logs\n⚙️ Config Changes", inline: false },
-            { name: "สถานะ", value: "เปิดโครงหน้าไว้แล้วเพื่อให้หน้าแอดมินครบ และค่อยต่อ query viewer แบบละเอียดภายหลัง", inline: false },
+            { name: "สถานะ", value: "ปุ่มในหน้านี้ใช้ดู log ล่าสุดได้แล้วแบบ ephemeral และดึงจาก DB จริง", inline: false },
           ],
         }),
       ],

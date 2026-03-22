@@ -12,6 +12,7 @@ import { cancelOrder } from "./handlers/staff.cancel.js";
 import { useInsuranceFromCard } from "./handlers/vehicleCard.useIns.js";
 import { openManualInsuranceModal, addManualInsuranceFromModal } from "./handlers/admin.addInsurance.js";
 import { handleInsuranceAdminButton, handleInsuranceAdminModal } from "./handlers/admin.insuranceTools.js";
+import { handleLogsAdminButton } from "./handlers/admin.logs.js";
 import { handleManagePacksButton, handleManagePacksSelect, handleManagePacksModal } from "./handlers/admin.managePacks.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
@@ -19,6 +20,7 @@ import { buildShopPanel } from "./panels/shopPanel.js";
 import { isAdmin } from "../domain/permissions.js";
 import { IDS } from "../config/constants.js";
 import { setRuntimeConfig } from "../config/runtimeConfig.js";
+import { AuditRepo } from "../db/repo/audit.repo.js";
 import { runVipTick } from "../jobs/vipRunner.js";
 import { isStaffActionId } from "./utils/customId.js";
 
@@ -121,6 +123,10 @@ export async function routeInteraction(interaction) {
           return handleInsuranceAdminButton(interaction);
         }
 
+        if (id.startsWith("admin:logs:")) {
+          return handleLogsAdminButton(interaction);
+        }
+
         if (id.startsWith("admin:nav:")) {
           const view = id.split(":")[2] || "dashboard";
           const payload = await buildAdminDashboardMessage(interaction.client, view);
@@ -143,6 +149,8 @@ export async function routeInteraction(interaction) {
 
         if (id === "admin:tool:refresh_shop") {
           const msg = await rebuildShopPanel(interaction.client, { forceCreate: false });
+          const target = msg?.id || IDS.PANEL_MESSAGE_ID || null;
+          await AuditRepo.add({ guildId: interaction.guildId, actorId: interaction.user.id, actorTag: interaction.user.tag ?? interaction.user.username, action: "SHOP_PANEL_REFRESH", target, meta: { channel_id: IDS.SHOP_CHANNEL_ID } });
           return interaction.editReply(`✅ Refresh Shop Panel แล้ว
 Message ID: ${msg.id}
 Channel: <#${IDS.SHOP_CHANNEL_ID}>`);
@@ -150,6 +158,7 @@ Channel: <#${IDS.SHOP_CHANNEL_ID}>`);
 
         if (id === "admin:tool:post_shop") {
           const sent = await rebuildShopPanel(interaction.client, { forceCreate: true });
+          await AuditRepo.add({ guildId: interaction.guildId, actorId: interaction.user.id, actorTag: interaction.user.tag ?? interaction.user.username, action: "SHOP_PANEL_DEPLOY", target: sent.id, meta: { channel_id: IDS.SHOP_CHANNEL_ID } });
           return interaction.editReply(`✅ ส่ง Shop Panel ใหม่แล้ว
 Message ID: ${sent.id}
 Channel: <#${IDS.SHOP_CHANNEL_ID}>
@@ -161,6 +170,7 @@ Channel: <#${IDS.SHOP_CHANNEL_ID}>
           const msg = await getAdminDashboardMessage(interaction.client);
           const payload = await buildAdminDashboardMessage(interaction.client, "dashboard");
           await msg.edit(payload);
+          await AuditRepo.add({ guildId: interaction.guildId, actorId: interaction.user.id, actorTag: interaction.user.tag ?? interaction.user.username, action: "ADMIN_PANEL_REBUILD", target: msg.id, meta: { channel_id: IDS.ADMIN_DASHBOARD_CHANNEL_ID } });
           return interaction.editReply(`✅ Rebuild Admin Panel แล้ว
 Message ID: ${msg.id}
 Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>`);
@@ -168,6 +178,7 @@ Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>`);
 
         if (id === "admin:tool:deploy_admin") {
           const sent = await deployAdminPanel(interaction.client);
+          await AuditRepo.add({ guildId: interaction.guildId, actorId: interaction.user.id, actorTag: interaction.user.tag ?? interaction.user.username, action: "ADMIN_PANEL_DEPLOY", target: sent.id, meta: { channel_id: IDS.ADMIN_DASHBOARD_CHANNEL_ID } });
           return interaction.editReply(`✅ ส่ง Admin Panel ใหม่แล้ว
 Message ID: ${sent.id}
 Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>
@@ -175,7 +186,7 @@ Channel: <#${IDS.ADMIN_DASHBOARD_CHANNEL_ID}>
 ระบบได้บันทึก ADMIN_DASHBOARD_MESSAGE_ID ลง DB ให้แล้ว`);
         }
 
-        if (id.startsWith("admin:config:") || id.startsWith("admin:logs:")) {
+        if (id.startsWith("admin:config:")) {
           return interaction.editReply("🛠️ ปุ่มนี้เปิดโครงไว้แล้ว เพื่อให้เมนูแอดมินครบและไม่กดแล้วพัง ตอนนี้ยังไม่ได้ผูก modal / query viewer เต็ม");
         }
 

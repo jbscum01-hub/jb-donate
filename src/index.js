@@ -13,6 +13,7 @@ import { IDS } from "./config/constants.js";
 import { loadRuntimeDiscordConfig, setRuntimeConfig } from "./config/runtimeConfig.js";
 import { runVipTick } from "./jobs/vipRunner.js";
 import { buildAdminDashboardMessage } from "./discord/panels/adminDashboard.js";
+import { AuditRepo } from "./db/repo/audit.repo.js";
 
 const client = createClient();
 
@@ -64,6 +65,7 @@ async function ensureAdminDashboardMessage(client) {
     const msg = await channel.messages.fetch(existingId).catch(() => null);
     if (msg) {
       await msg.edit(payload).catch((e) => console.error("edit admin dashboard failed:", e));
+      await AuditRepo.add({ guildId: ENV.GUILD_ID, actorId: client.user?.id ?? null, actorTag: client.user?.tag ?? "bot", action: "ADMIN_PANEL_BOOT_REFRESH", target: msg.id, meta: { channel_id: channel.id } }).catch(() => {});
       console.log("✅ Admin dashboard message updated:", msg.id);
       return msg.id;
     }
@@ -74,6 +76,7 @@ async function ensureAdminDashboardMessage(client) {
   await created.pin().catch(() => {});
   await setRuntimeConfig("ADMIN_DASHBOARD_CHANNEL_ID", channel.id);
   await setRuntimeConfig("ADMIN_DASHBOARD_MESSAGE_ID", created.id);
+  await AuditRepo.add({ guildId: ENV.GUILD_ID, actorId: client.user?.id ?? null, actorTag: client.user?.tag ?? "bot", action: "ADMIN_PANEL_BOOT_DEPLOY", target: created.id, meta: { channel_id: channel.id } }).catch(() => {});
   console.log("✅ Admin dashboard message created:", created.id);
   console.log("➡️ Saved ADMIN_DASHBOARD_MESSAGE_ID to tb_donate_discord_config");
   return created.id;

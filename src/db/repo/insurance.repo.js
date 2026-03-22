@@ -91,6 +91,14 @@ export const InsuranceRepo = {
     return rows;
   },
 
+  async listRecentLogs(limit = 12) {
+    const { rows } = await pool.query(
+      `select * from tb_donate_insurance_logs order by created_at desc, id desc limit $1`,
+      [Number(limit) || 12]
+    );
+    return rows;
+  },
+
   async useOnce(plate, kind) {
     const { rows } = await pool.query(SQL.useVehicleInsurance, [plate, kind]);
     return rows[0] ?? null;
@@ -98,7 +106,7 @@ export const InsuranceRepo = {
 
   async log(l) {
     await pool.query(SQL.insertInsuranceLog, [
-      l.guild_id,
+      l.guild_id ?? l.guildId ?? null,
       l.plate,
       l.kind,
       l.action,
