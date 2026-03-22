@@ -10,6 +10,7 @@ import { OrdersRepo } from "../../db/repo/orders.repo.js";
 import { VipRepo } from "../../db/repo/vip.repo.js";
 import { InsuranceRepo } from "../../db/repo/insurance.repo.js";
 import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
+import { CashLedgerRepo } from "../../db/repo/cashLedger.repo.js";
 
 function nowTH() {
   return new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" });
@@ -113,6 +114,15 @@ function searchActionsRow() {
   );
 }
 
+function cashActionsRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("admin:cash:summary").setLabel("ยอดเงินรวม").setEmoji("💰").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("admin:cash:add").setLabel("เพิ่มเงินเข้า").setEmoji("➕").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("admin:cash:withdraw").setLabel("เบิกเงินออก").setEmoji("➖").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("admin:cash:history").setLabel("ประวัติการเงิน").setEmoji("📜").setStyle(ButtonStyle.Secondary),
+  );
+}
+
 export async function buildAdminDashboardSnapshot(client) {
   const data = {
     totalAmount: 0,
@@ -140,6 +150,7 @@ export async function buildAdminDashboardSnapshot(client) {
     vip: { active: 0, expiring_24h: 0, expiring_3d: 0, due_grants: 0, expired: 0 },
     vipExpiringSoon: [],
     insurance: { active: 0, expiring_24h: 0, expiring_3d: 0, exhausted: 0, expired: 0, soon: [] },
+    cash: { donated: 0, manualIn: 0, withdrawn: 0, balance: 0, txCount: 0, lastTxAt: null, ready: false },
     notes: [],
   };
 
@@ -180,6 +191,19 @@ export async function buildAdminDashboardSnapshot(client) {
       data.vipExpiringSoon = await VipRepo.listExpiringSoon(ENV.GUILD_ID, 24, 5);
       data.insurance = await InsuranceRepo.getDashboardStats(5);
       data.queueCount = await OrdersRepo.getOpenQueueCount(ENV.GUILD_ID);
+      const cash = await CashLedgerRepo.getSummary(ENV.GUILD_ID);
+      data.cash = {
+        donated: data.totalAmount,
+        manualIn: n(cash.total_in),
+        withdrawn: n(cash.total_out),
+        balance: data.totalAmount + n(cash.total_in) - n(cash.total_out),
+        txCount: n(cash.tx_count),
+        lastTxAt: cash.last_tx_at || null,
+        ready: Boolean(cash.ready),
+      };
+      if (!cash.ready) {
+        data.notes.push("ℹ️ Cash ledger ยังไม่พร้อม — รัน scripts/create_cash_ledger.sql ก่อนเพื่อใช้ปุ่มการเงินใหม่");
+      }
     }
   } catch (e) {
     data.notes.push(`⚠️ Dashboard stats error: ${e?.message || String(e)}`);
@@ -311,6 +335,7 @@ export async function buildAdminDashboardMessage(client, view = "dashboard") {
   const components = [mainNavRow(view), footerRow(view)];
 
   if (view === "dashboard") {
+    components.splice(1, 0, cashActionsRow());
     const snapshot = await buildAdminDashboardSnapshot(client);
     return { embeds: [buildDashboardEmbed(snapshot)], components };
   }

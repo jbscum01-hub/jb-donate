@@ -15,6 +15,7 @@ import { handleInsuranceAdminButton, handleInsuranceAdminModal } from "./handler
 import { handleLogsAdminButton } from "./handlers/admin.logs.js";
 import { handleAdminSearchButton, handleAdminSearchModal } from "./handlers/admin.search.js";
 import { handleManagePacksButton, handleManagePacksSelect, handleManagePacksModal } from "./handlers/admin.managePacks.js";
+import { handleCashButton, handleCashModal } from "./handlers/admin.cash.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
 import { buildShopPanel } from "./panels/shopPanel.js";
@@ -100,6 +101,7 @@ export async function routeInteraction(interaction) {
       if (interaction.customId.startsWith("admin:packs:modal:")) return handleManagePacksModal(interaction);
       if (interaction.customId.startsWith("admin:insurance:modal:")) return handleInsuranceAdminModal(interaction);
       if (interaction.customId.startsWith("admin:search:modal:")) return handleAdminSearchModal(interaction);
+      if (interaction.customId.startsWith("admin:cash:modal:")) return handleCashModal(interaction);
       return;
     }
 
@@ -131,6 +133,10 @@ export async function routeInteraction(interaction) {
 
         if (id.startsWith("admin:search:")) {
           return handleAdminSearchButton(interaction);
+        }
+
+        if (id.startsWith("admin:cash:")) {
+          return handleCashButton(interaction);
         }
 
         if (id.startsWith("admin:nav:")) {

@@ -77,18 +77,20 @@ export const SQL = {
         (date_trunc('day', (now() at time zone 'Asia/Bangkok') + interval '1 day')) as day_end_th
     )
     select
-      coalesce(sum(o.amount), 0)::bigint as total_amount,
-      count(*)::bigint as total_orders,
+      coalesce(sum(case when o.status = 'SUCCESS' then o.amount else 0 end), 0)::bigint as total_amount,
+      count(case when o.status = 'SUCCESS' then 1 end)::bigint as total_orders,
       coalesce(sum(
         case
-          when (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
+          when o.status = 'SUCCESS'
+           and (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
            and (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') <  (select day_end_th from tz)
           then o.amount else 0
         end
       ), 0)::bigint as today_amount,
       count(
         case
-          when (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
+          when o.status = 'SUCCESS'
+           and (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') >= (select day_start_th from tz)
            and (o.created_at at time zone 'UTC' at time zone 'Asia/Bangkok') <  (select day_end_th from tz)
           then 1 else null
         end
@@ -129,21 +131,27 @@ export const SQL = {
                  and b.status='CANCELLED' then 1 end)::bigint as today_cancelled,
       coalesce(sum(case when b.created_th >= (select day_start_th from tz)
                          and b.created_th <  (select day_end_th from tz)
+                         and b.status='SUCCESS'
                          and b.type='DONATE' then b.amount else 0 end),0)::bigint as today_donate_amount,
       count(case when b.created_th >= (select day_start_th from tz)
                  and b.created_th <  (select day_end_th from tz)
+                 and b.status='SUCCESS'
                  and b.type='DONATE' then 1 end)::bigint as today_donate_orders,
       coalesce(sum(case when b.created_th >= (select day_start_th from tz)
                          and b.created_th <  (select day_end_th from tz)
+                         and b.status='SUCCESS'
                          and b.type='VIP' then b.amount else 0 end),0)::bigint as today_vip_amount,
       count(case when b.created_th >= (select day_start_th from tz)
                  and b.created_th <  (select day_end_th from tz)
+                 and b.status='SUCCESS'
                  and b.type='VIP' then 1 end)::bigint as today_vip_orders,
       coalesce(sum(case when b.created_th >= (select day_start_th from tz)
                          and b.created_th <  (select day_end_th from tz)
+                         and b.status='SUCCESS'
                          and b.type='BOOST' then b.amount else 0 end),0)::bigint as today_boost_amount,
       count(case when b.created_th >= (select day_start_th from tz)
                  and b.created_th <  (select day_end_th from tz)
+                 and b.status='SUCCESS'
                  and b.type='BOOST' then 1 end)::bigint as today_boost_orders,
       count(case when b.status='PENDING' and b.created_at <= now() - interval '24 hours' then 1 end)::bigint as pending_over_24h,
       min(case when b.status='PENDING' then b.created_th end) as oldest_pending_th
@@ -165,6 +173,7 @@ export const SQL = {
            coalesce(sum(amount),0)::bigint as amount
     from tb_donate_orders
     where guild_id=$1
+      and status='SUCCESS'
       and created_at >= (now() - interval '7 days')
     group by pack_code
     order by amount desc, orders desc
