@@ -4,44 +4,73 @@ function money(v) {
   return `${Number(v || 0).toLocaleString("th-TH")} บาท`;
 }
 
-function cleanLines(lines = []) {
+function cleanText(value) {
+  return String(value ?? "").trim();
+}
+
+function normalizeLines(lines = []) {
   return lines
-    .map((x) => String(x ?? "").trim())
+    .map((x) => cleanText(x))
     .filter(Boolean);
 }
 
-function pushSection(lines, sectionLines = []) {
-  const cleaned = cleanLines(sectionLines);
+function pushSpacer(lines) {
+  if (lines.length && lines[lines.length - 1] !== "") {
+    lines.push("");
+  }
+}
+
+function pushBulletSection(lines, title, values = []) {
+  const cleaned = normalizeLines(values);
   if (!cleaned.length) return;
-  if (lines.length) lines.push("");
-  lines.push(...cleaned);
+  pushSpacer(lines);
+  lines.push(title);
+  for (const value of cleaned) {
+    lines.push(`• ${value}`);
+  }
+}
+
+function pushInlineChoiceSection(lines, title, values = []) {
+  const cleaned = normalizeLines(values);
+  if (!cleaned.length) return;
+  pushSpacer(lines);
+  lines.push(title);
+  lines.push(`• ${cleaned.join(" • ")}`);
 }
 
 export function buildPackDetailLines(details) {
   const lines = [];
 
-  if (details?.description) {
-    lines.push(String(details.description).trim());
+  const description = cleanText(details?.description);
+  if (description) {
+    lines.push(description);
   }
 
-  pushSection(lines, (details?.benefits ?? []).map((x) => `🎁 ${x}`));
-  pushSection(lines, (details?.displayItems ?? []).map((x) => `📦 ${x}`));
-  pushSection(lines, (details?.vehicleChoices ?? []).map((x) => `🚗 ${x}`));
-  pushSection(lines, (details?.boatChoices ?? []).map((x) => `🛥️ ${x}`));
+  pushBulletSection(lines, "🎁 **สิทธิ์**", details?.benefits ?? []);
+  pushBulletSection(lines, "📦 **ของที่ได้รับ**", details?.displayItems ?? []);
+  pushInlineChoiceSection(lines, "🚗 **รถที่เลือกได้**", details?.vehicleChoices ?? []);
+  pushInlineChoiceSection(lines, "🛥️ **เรือที่เลือกได้**", details?.boatChoices ?? []);
+
+  const insuranceLines = [];
 
   if (Number(details?.car_insurance_total || 0) > 0) {
-    pushSection(lines, [
-      `🛡️ ประกันรถ ${Number(details.car_insurance_total)} ครั้ง / ${Number(details.car_insurance_days || 0)} วัน`,
-    ]);
+    insuranceLines.push(
+      `รถ ${Number(details.car_insurance_total)} ครั้ง / ${Number(details.car_insurance_days || 0)} วัน`
+    );
   }
 
   if (Number(details?.boat_insurance_total || 0) > 0) {
-    pushSection(lines, [
-      `🛡️ ประกันเรือ ${Number(details.boat_insurance_total)} ครั้ง / ${Number(details.boat_insurance_days || 0)} วัน`,
-    ]);
+    insuranceLines.push(
+      `เรือ ${Number(details.boat_insurance_total)} ครั้ง / ${Number(details.boat_insurance_days || 0)} วัน`
+    );
   }
 
-  return cleanLines(lines.length ? lines : ["-"]);
+  pushBulletSection(lines, "🛡️ **ประกัน**", insuranceLines);
+
+  while (lines[0] === "") lines.shift();
+  while (lines[lines.length - 1] === "") lines.pop();
+
+  return lines.length ? lines : ["-"];
 }
 
 export function buildPackDetailsEmbed(details, { titlePrefix = "📦", includePriceInTitle = true } = {}) {
