@@ -1,63 +1,58 @@
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 function money(v) {
   return `${Number(v || 0).toLocaleString("th-TH")} บาท`;
 }
 
+function cleanLines(lines = []) {
+  return lines
+    .map((x) => String(x ?? "").trim())
+    .filter(Boolean);
+}
+
+function pushSection(lines, sectionLines = []) {
+  const cleaned = cleanLines(sectionLines);
+  if (!cleaned.length) return;
+  if (lines.length) lines.push("");
+  lines.push(...cleaned);
+}
+
 export function buildPackDetailLines(details) {
   const lines = [];
 
-  if (details.description) {
+  if (details?.description) {
     lines.push(String(details.description).trim());
   }
 
-  if (details.benefits?.length) {
-    lines.push("", ...details.benefits.map((x) => `🎁 ${x}`));
+  pushSection(lines, (details?.benefits ?? []).map((x) => `🎁 ${x}`));
+  pushSection(lines, (details?.displayItems ?? []).map((x) => `📦 ${x}`));
+  pushSection(lines, (details?.vehicleChoices ?? []).map((x) => `🚗 ${x}`));
+  pushSection(lines, (details?.boatChoices ?? []).map((x) => `🛥️ ${x}`));
+
+  if (Number(details?.car_insurance_total || 0) > 0) {
+    pushSection(lines, [
+      `🛡️ ประกันรถ ${Number(details.car_insurance_total)} ครั้ง / ${Number(details.car_insurance_days || 0)} วัน`,
+    ]);
   }
 
-  if (details.displayItems?.length) {
-    lines.push("", ...details.displayItems.map((x) => `📦 ${x}`));
+  if (Number(details?.boat_insurance_total || 0) > 0) {
+    pushSection(lines, [
+      `🛡️ ประกันเรือ ${Number(details.boat_insurance_total)} ครั้ง / ${Number(details.boat_insurance_days || 0)} วัน`,
+    ]);
   }
 
-  if (details.vehicleChoices?.length) {
-    lines.push("", ...details.vehicleChoices.map((x) => `🚗 ${x}`));
-  }
-
-  if (details.boatChoices?.length) {
-    lines.push("", ...details.boatChoices.map((x) => `🛥️ ${x}`));
-  }
-
-  if (Number(details.car_insurance_total || 0) > 0) {
-    lines.push(
-      "",
-      `🛡️ ประกันรถ ${details.car_insurance_total} ครั้ง / ${details.car_insurance_days || 0} วัน`
-    );
-  }
-
-  if (Number(details.boat_insurance_total || 0) > 0) {
-    lines.push(`🛡️ ประกันเรือ ${details.boat_insurance_total} ครั้ง / ${details.boat_insurance_days || 0} วัน`);
-  }
-
-  return lines.filter((line, index, arr) => {
-    if (line !== "") return true;
-    const prev = arr[index - 1];
-    const next = arr[index + 1];
-    return Boolean(prev) && Boolean(next);
-  });
+  return cleanLines(lines.length ? lines : ["-"]);
 }
 
-export function buildPackDetailsEmbed(details) {
-  const lines = buildPackDetailLines(details);
+export function buildPackDetailsEmbed(details, { titlePrefix = "📦", includePriceInTitle = true } = {}) {
+  const title = includePriceInTitle
+    ? `${titlePrefix} ${details.pack_name} — ${money(details.price)}`
+    : `${titlePrefix} ${details.pack_name}`;
 
   const embed = new EmbedBuilder()
     .setColor(details.embed_color ?? 0x5865f2)
-    .setTitle(`📦 ${details.pack_name} — ${money(details.price)}`)
-    .setDescription(lines.join("\n").slice(0, 4096) || "-")
-    .addFields(
-      { name: "Code", value: `\`${details.pack_code}\``, inline: true },
-      { name: "Type", value: details.pack_type || "DONATE", inline: true },
-      { name: "Price", value: money(details.price), inline: true },
-    );
+    .setTitle(title.slice(0, 256))
+    .setDescription(buildPackDetailLines(details).join("\n").slice(0, 4096));
 
   if (details.image_url) {
     embed.setImage(details.image_url);
@@ -66,33 +61,15 @@ export function buildPackDetailsEmbed(details) {
   return embed;
 }
 
-export function buildPackDetailFields(details, fieldName = "รายละเอียดแพ็ก") {
-  const text = buildPackDetailLines(details).join("\n").trim();
-  if (!text) return [];
+export function buildShopPackMessage(details) {
+  const buyBtn = new ButtonBuilder()
+    .setCustomId(`shop:buy:${details.pack_type}:${details.pack_code}`)
+    .setLabel("ซื้อแพ็กนี้")
+    .setEmoji("🛒")
+    .setStyle(ButtonStyle.Success);
 
-  const fields = [];
-  const chunks = [];
-  let current = "";
-
-  for (const line of text.split("\n")) {
-    const candidate = current ? `${current}\n${line}` : line;
-    if (candidate.length > 1024) {
-      if (current) chunks.push(current);
-      current = line;
-    } else {
-      current = candidate;
-    }
-  }
-
-  if (current) chunks.push(current);
-
-  chunks.forEach((chunk, index) => {
-    fields.push({
-      name: index === 0 ? fieldName : `${fieldName} (ต่อ)`,
-      value: chunk,
-      inline: false,
-    });
-  });
-
-  return fields;
+  return {
+    embeds: [buildPackDetailsEmbed(details)],
+    components: [new ActionRowBuilder().addComponents(buyBtn)],
+  };
 }

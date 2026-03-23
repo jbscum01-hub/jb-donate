@@ -522,8 +522,8 @@ export async function handleManagePacksButton(interaction, { refreshShopPanel } 
 
   if (id === "admin:packs:refresh") {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-    const msg = await refreshShopPanel();
-    return interaction.editReply(`✅ Refresh Shop Panel แล้ว\nMessage ID: ${msg.id}`);
+    const result = await refreshShopPanel();
+    return interaction.editReply(`✅ Refresh Shop Panels แล้ว\nPanels: ${result.total}\nCreated: ${result.created}\nEdited: ${result.edited}\nRemoved: ${result.removed}`);
   }
 
   if (id.startsWith("admin:packs:contents:")) {

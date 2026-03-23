@@ -1,44 +1,12 @@
-import {
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  EmbedBuilder,
-} from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
+import { IDS } from "../../config/constants.js";
+import { buildShopPackMessage } from "../utils/packDetailEmbed.js";
 
-function iconForPack(code) {
-  const map = {
-    BRONZE: "🥉",
-    SILVER: "🥈",
-    GOLD: "🥇",
-    PLATINUM: "💠",
-    DIAMOND: "💎",
-  };
-  return map[code] ?? "🧾";
-}
+const INTRO_PANEL_KEY = "__INTRO__";
 
-function money(n) {
-  return `${Number(n || 0).toLocaleString("th-TH")} บาท`;
-}
-
-function buildPackPreviewField(pack) {
-  const title = `${iconForPack(pack.pack_code)} ${pack.pack_code} — ${money(pack.price)}`;
-  const lines = (
-    pack.summary_lines?.length
-      ? pack.summary_lines
-      : ["กดเลือกแพ็กเพื่อดูรายละเอียดเต็ม"]
-  ).slice(0, 4);
-
-  return {
-    name: title.slice(0, 256),
-    value: lines.map((x) => `• ${x}`).join("\n").slice(0, 1024),
-    inline: false,
-  };
-}
-
-export async function buildShopPanel() {
-  const packs = await DonatePackRepo.listActiveShopOptions();
-
-  const introEmbed = new EmbedBuilder()
+function buildIntroEmbed(activePackCount = 0) {
+  const embed = new EmbedBuilder()
     .setColor(0x1f8b4c)
     .setTitle("🛒 J&B DONATE SHOP")
     .setDescription(
@@ -46,78 +14,67 @@ export async function buildShopPanel() {
 
 ขอบคุณทุกการสนับสนุน ❤️
 ระบบ Donate ของเรา **ไม่ Pay to Win**
-เน้น Cosmetic / ความสะดวก / สนับสนุนเซิร์ฟเป็นหลัก`
+เน้น Cosmetic / ความสะดวก / สิทธิ์เสริมบางส่วน`
     )
     .addFields(
       {
         name: "📩 วิธีซื้อ",
         value:
 `1) เลือกแพ็กที่ต้องการ
-2) กรอกข้อมูลให้ตรงกับตัวละคร
-3) โอนเงินและส่งสลิปในห้อง Ticket
+2) กดปุ่มซื้อแพ็ก
+3) แนบสลิปใน Ticket ให้ครบถ้วน
 4) รอทีมงานตรวจสอบและดำเนินการ`,
         inline: false,
       },
       {
         name: "📜 เงื่อนไข",
         value:
-`• ชื่อตัวละครต้องตรงกับในเกม
-• Donate แล้วไม่สามารถขอคืนเงิน
-• แอดมินขอสงวนสิทธิ์ปรับแพ็กเพื่อสมดุลเซิร์ฟ`,
+`• ชื่อ/ข้อมูลต้องตรงกับในเกม
+• Donate แล้วไม่สามารถขอคืนเงินได้
+• แอดมินขอสงวนสิทธิ์ปรับแพ็กเพื่อความสมดุลเซิร์ฟ`,
         inline: false,
       }
     )
-    .setFooter({
-      text: packs.length
-        ? `J&B SCUM PVE • Active Packs: ${packs.length}`
-        : "J&B SCUM PVE",
-    });
+    .setFooter({ text: `J&B SCUM PVE • Active Packs: ${activePackCount}` });
 
-  const previewEmbed = new EmbedBuilder()
-    .setColor(0x2b2d31)
-    .setTitle("📦 รายการแพ็กโดเนท")
-    .setDescription(
-      "ผู้เล่นสามารถดูภาพรวมทุกแพ็กได้ก่อน และกดเลือกจากเมนูด้านล่างเพื่อดูรายละเอียด/ซื้อแพ็ก"
-    );
-
-  if (!packs.length) {
-    previewEmbed.addFields({
-      name: "ยังไม่มีแพ็กที่เปิดใช้งาน",
-      value: "กรุณาติดต่อทีมงาน",
-      inline: false,
-    });
-  } else {
-    previewEmbed.addFields(packs.map(buildPackPreviewField).slice(0, 25));
+  if (IDS.SHOP_QR_IMAGE_URL) {
+    embed.setImage(IDS.SHOP_QR_IMAGE_URL);
   }
 
-  const select = new StringSelectMenuBuilder()
-    .setCustomId("shop_select")
-    .setPlaceholder("🧾 เลือกแพ็กเพื่อดูรายละเอียด / ซื้อแพ็ก");
+  return embed;
+}
 
-  if (!packs.length) {
-    select.addOptions({
-      label: "ไม่มีแพ็กที่เปิดใช้งาน",
-      description: "กรุณาติดต่อแอดมิน",
-      value: "DISABLED:NO_PACKS",
-    });
-  } else {
-    select.addOptions({
-      label: "— เลือกแพ็ก —",
-      description: "เลือกเพื่อดูรายละเอียดก่อนซื้อ",
-      value: "__empty__",
-    });
+export async function buildShopPanels() {
+  const packs = await DonatePackRepo.listActiveShopOptions();
+  const details = await Promise.all(
+    packs.map((pack) => DonatePackRepo.getPackDetails(pack.pack_code))
+  );
 
-    select.addOptions(
-      packs.slice(0, 24).map((pack) => ({
-        label: `${iconForPack(pack.pack_code)} ${pack.pack_code}`.slice(0, 100),
-        description: `${money(pack.price)} • ${pack.pack_name}`.slice(0, 100),
-        value: `${pack.pack_type}:${pack.pack_code}`,
-      }))
-    );
-  }
-
-  return {
-    embeds: [introEmbed, previewEmbed],
-    components: [new ActionRowBuilder().addComponents(select)],
+  const intro = {
+    panelKey: INTRO_PANEL_KEY,
+    sortOrder: 0,
+    packId: null,
+    packCode: null,
+    payload: {
+      embeds: [buildIntroEmbed(packs.length)],
+      components: [],
+    },
   };
+
+  const packPanels = details
+    .filter(Boolean)
+    .map((detail, idx) => ({
+      panelKey: `PACK:${detail.pack_code}`,
+      sortOrder: Number(detail.sort_order || (idx + 1) * 10),
+      packId: detail.pack_id,
+      packCode: detail.pack_code,
+      payload: buildShopPackMessage(detail),
+    }));
+
+  return [intro, ...packPanels];
+}
+
+export async function buildShopPanel() {
+  const panels = await buildShopPanels();
+  return panels[0]?.payload ?? { embeds: [buildIntroEmbed(0)], components: [] };
 }

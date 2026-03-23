@@ -8,6 +8,7 @@ let loadError = null;
 const CONFIG_META = {
   SHOP_CHANNEL_ID: "Shop Channel",
   PANEL_MESSAGE_ID: "Shop Panel Message",
+  SHOP_QR_IMAGE_URL: "Shop QR Image URL",
   ADMIN_DASHBOARD_CHANNEL_ID: "Admin Dashboard Channel",
   ADMIN_DASHBOARD_MESSAGE_ID: "Admin Dashboard Message",
   ADMIN_ROLE_ID: "Admin Role",

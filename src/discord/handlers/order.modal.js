@@ -13,7 +13,7 @@ import { IDS } from "../../config/constants.js";
 import { createTicketChannel } from "../utils/tickets.js";
 import { buildStaffPanel } from "../panels/staffPanel.js";
 import { safeReply } from "../utils/messages.js";
-import { buildPackDetailFields } from "../utils/packDetailEmbed.js";
+import { buildPackDetailLines } from "../utils/packDetailEmbed.js";
 
 export async function createOrderFromModal(interaction) {
   if (!interaction.deferred && !interaction.replied) {
@@ -145,10 +145,14 @@ export async function createOrderFromModal(interaction) {
       intro.setImage(donatePack.image_url);
     }
 
-    if (type === "DONATE") {
-      const detailFields = buildPackDetailFields(donatePack, "รายละเอียดแพ็ก");
-      if (detailFields.length) {
-        intro.addFields(...detailFields);
+    if (type === "DONATE" && donatePack) {
+      const packLines = buildPackDetailLines(donatePack).join("\n").slice(0, 1024);
+      if (packLines) {
+        intro.addFields({
+          name: "รายละเอียดแพ็ก",
+          value: packLines,
+          inline: false,
+        });
       }
     }
 

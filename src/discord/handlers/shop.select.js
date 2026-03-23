@@ -4,12 +4,10 @@ import {
   TextInputStyle,
   ActionRowBuilder,
   MessageFlags,
-  ButtonBuilder,
-  ButtonStyle,
 } from "discord.js";
 
 import { DonatePackRepo } from "../../db/repo/donatePack.repo.js";
-import { buildPackDetailsEmbed } from "../utils/packDetailEmbed.js";
+import { buildShopPackMessage } from "../utils/packDetailEmbed.js";
 
 export function buildOrderModal(type, code) {
   const modal = new ModalBuilder()
@@ -79,15 +77,8 @@ export async function previewShopPack(interaction) {
       return interaction.reply({ content: "❌ ไม่พบรายละเอียดแพ็กนี้", flags: MessageFlags.Ephemeral }).catch(() => {});
     }
 
-    const buyBtn = new ButtonBuilder()
-      .setCustomId(`shop:buy:${details.pack_type}:${details.pack_code}`)
-      .setLabel("ซื้อแพ็กนี้")
-      .setEmoji("🛒")
-      .setStyle(ButtonStyle.Success);
-
     return interaction.reply({
-      embeds: [buildPackDetailsEmbed(details)],
-      components: [new ActionRowBuilder().addComponents(buyBtn)],
+      ...buildShopPackMessage(details),
       flags: MessageFlags.Ephemeral,
     }).catch(() => {});
   } catch (err) {

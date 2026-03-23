@@ -19,4 +19,5 @@ export const IDS = {
 
   get TICKET_CATEGORY_ID() { return getRuntimeConfig("TICKET_CATEGORY_ID"); },
   get PANEL_MESSAGE_ID() { return getRuntimeConfig("PANEL_MESSAGE_ID"); },
+  get SHOP_QR_IMAGE_URL() { return getRuntimeConfig("SHOP_QR_IMAGE_URL"); },
 };

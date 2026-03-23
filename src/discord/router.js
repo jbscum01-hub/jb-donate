@@ -18,11 +18,12 @@ import { handleManagePacksButton, handleManagePacksSelect, handleManagePacksModa
 import { handleCashButton, handleCashModal } from "./handlers/admin.cash.js";
 
 import { buildAdminDashboardMessage } from "./panels/adminDashboard.js";
-import { buildShopPanel } from "./panels/shopPanel.js";
+import { buildShopPanels } from "./panels/shopPanel.js";
 import { isAdmin } from "../domain/permissions.js";
 import { IDS } from "../config/constants.js";
 import { setRuntimeConfig } from "../config/runtimeConfig.js";
 import { AuditRepo } from "../db/repo/audit.repo.js";
+import { ShopPanelRepo } from "../db/repo/shopPanel.repo.js";
 import { runVipTick } from "../jobs/vipRunner.js";
 import { isStaffActionId } from "./utils/customId.js";
 
@@ -41,33 +42,78 @@ async function getAdminDashboardMessage(client) {
   return msg;
 }
 
-async function rebuildShopPanel(client, { forceCreate = false } = {}) {
+async function rebuildShopPanel(client) {
   const channelId = IDS.SHOP_CHANNEL_ID;
   if (!channelId) throw new Error("Missing SHOP_CHANNEL_ID (DB/ENV)");
 
   const ch = await client.channels.fetch(channelId).catch(() => null);
   if (!ch) throw new Error("Cannot fetch shop channel");
 
-  const payload = await buildShopPanel();
+  const panels = await buildShopPanels();
+  const existing = await ShopPanelRepo.listByChannel(channelId);
+  const existingMap = new Map(existing.map((row) => [row.panel_key, row]));
 
-  if (!forceCreate) {
-    const panelMessageId = IDS.PANEL_MESSAGE_ID;
-    if (!panelMessageId) throw new Error("Missing PANEL_MESSAGE_ID (DB/ENV)");
+  const touchedKeys = [];
+  const messages = [];
+  let created = 0;
+  let edited = 0;
 
-    const oldMsg = await ch.messages.fetch(panelMessageId).catch(() => null);
-    if (!oldMsg) {
-      throw new Error(`Cannot fetch panel message: ${panelMessageId} in channel ${channelId}`);
+  for (const [index, panel] of panels.entries()) {
+    const existingRow = existingMap.get(panel.panelKey) ?? null;
+    let msg = null;
+
+    if (existingRow?.message_id) {
+      msg = await ch.messages.fetch(existingRow.message_id).catch(() => null);
     }
 
-    await oldMsg.edit(payload);
-    return oldMsg;
+    if (msg) {
+      await msg.edit(panel.payload);
+      edited += 1;
+    } else {
+      msg = await ch.send(panel.payload);
+      created += 1;
+      if (index === 0) {
+        await msg.pin().catch(() => {});
+      }
+    }
+
+    messages.push(msg);
+    touchedKeys.push(panel.panelKey);
+
+    await ShopPanelRepo.upsert({
+      channelId,
+      panelKey: panel.panelKey,
+      packId: panel.packId,
+      packCode: panel.packCode,
+      messageId: msg.id,
+      sortOrder: panel.sortOrder,
+      isActive: true,
+    });
   }
 
-  const sent = await ch.send(payload);
-  await sent.pin().catch(() => {});
-  await setRuntimeConfig("SHOP_CHANNEL_ID", ch.id);
-  await setRuntimeConfig("PANEL_MESSAGE_ID", sent.id);
-  return sent;
+  const staleRows = await ShopPanelRepo.deactivateMissing(channelId, touchedKeys);
+  let removed = 0;
+  for (const row of staleRows) {
+    const staleMsg = await ch.messages.fetch(row.message_id).catch(() => null);
+    if (staleMsg) {
+      await staleMsg.delete().catch(() => {});
+      removed += 1;
+    }
+  }
+
+  if (messages[0]?.id) {
+    await setRuntimeConfig("PANEL_MESSAGE_ID", messages[0].id);
+  }
+
+  return {
+    channelId,
+    introMessage: messages[0] ?? null,
+    messages,
+    total: messages.length,
+    created,
+    edited,
+    removed,
+  };
 }
 
 async function deployAdminPanel(client) {
@@ -119,7 +165,7 @@ export async function routeInteraction(interaction) {
 
         if (id.startsWith("admin:packs:")) {
           return handleManagePacksButton(interaction, {
-            refreshShopPanel: () => rebuildShopPanel(interaction.client, { forceCreate: false }),
+            refreshShopPanel: () => rebuildShopPanel(interaction.client),
           });
         }
 
@@ -160,22 +206,17 @@ export async function routeInteraction(interaction) {
         }
 
         if (id === "admin:tool:refresh_shop") {
-          const msg = await rebuildShopPanel(interaction.client, { forceCreate: false });
-          const target = msg?.id || IDS.PANEL_MESSAGE_ID || null;
-          await AuditRepo.add({ guildId: interaction.guildId, actorId: interaction.user.id, actorTag: interaction.user.tag ?? interaction.user.username, action: "SHOP_PANEL_REFRESH", target, meta: { channel_id: IDS.SHOP_CHANNEL_ID } });
-          return interaction.editReply(`✅ Refresh Shop Panel แล้ว
-Message ID: ${msg.id}
-Channel: <#${IDS.SHOP_CHANNEL_ID}>`);
+          const result = await rebuildShopPanel(interaction.client);
+          const target = result?.introMessage?.id || IDS.PANEL_MESSAGE_ID || null;
+          await AuditRepo.add({ guildId: interaction.guildId, actorId: interaction.user.id, actorTag: interaction.user.tag ?? interaction.user.username, action: "SHOP_PANEL_REFRESH", target, meta: { channel_id: IDS.SHOP_CHANNEL_ID, total: result.total, created: result.created, edited: result.edited, removed: result.removed } });
+          return interaction.editReply(`✅ Refresh Shop Panels แล้ว\nPanels: ${result.total}\nCreated: ${result.created}\nEdited: ${result.edited}\nRemoved: ${result.removed}\nChannel: <#${IDS.SHOP_CHANNEL_ID}>`);
         }
 
         if (id === "admin:tool:post_shop") {
-          const sent = await rebuildShopPanel(interaction.client, { forceCreate: true });
-          await AuditRepo.add({ guildId: interaction.guildId, actorId: interaction.user.id, actorTag: interaction.user.tag ?? interaction.user.username, action: "SHOP_PANEL_DEPLOY", target: sent.id, meta: { channel_id: IDS.SHOP_CHANNEL_ID } });
-          return interaction.editReply(`✅ ส่ง Shop Panel ใหม่แล้ว
-Message ID: ${sent.id}
-Channel: <#${IDS.SHOP_CHANNEL_ID}>
-
-ระบบได้บันทึก PANEL_MESSAGE_ID ลง DB ให้แล้ว`);
+          const result = await rebuildShopPanel(interaction.client);
+          const target = result?.introMessage?.id || IDS.PANEL_MESSAGE_ID || null;
+          await AuditRepo.add({ guildId: interaction.guildId, actorId: interaction.user.id, actorTag: interaction.user.tag ?? interaction.user.username, action: "SHOP_PANEL_DEPLOY", target, meta: { channel_id: IDS.SHOP_CHANNEL_ID, total: result.total, created: result.created, edited: result.edited, removed: result.removed } });
+          return interaction.editReply(`✅ Deploy Shop Panels แล้ว\nPanels: ${result.total}\nCreated: ${result.created}\nEdited: ${result.edited}\nRemoved: ${result.removed}\nChannel: <#${IDS.SHOP_CHANNEL_ID}>\n\nระบบได้อัปเดต PANEL_MESSAGE_ID ให้เป็นข้อความพาเนลแรกแล้ว`);
         }
 
         if (id === "admin:tool:rebuild_admin") {
