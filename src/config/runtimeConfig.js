@@ -26,7 +26,6 @@ const CONFIG_META = {
   SERVER_STATUS_GIF_OFFLINE: "Server Status GIF Offline",
   RESTART_NOTIFY_CHANNEL_ID: "Restart Notify Channel",
   RESTART_SCHEDULE_HOURS: "Restart Schedule Hours",
-  RESTART_NOTIFY_MINUTES: "Restart Notify Minutes",
 };
 
 export async function loadRuntimeDiscordConfig() {
