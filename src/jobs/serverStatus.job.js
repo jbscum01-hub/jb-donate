@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActivityType } from 'discord.js';
 import { IDS } from '../config/constants.js';
-import { setRuntimeConfig } from '../config/runtimeConfig.js';
+import { setRuntimeConfig, getRuntimeConfig } from '../config/runtimeConfig.js';
 import { getScumServerStatus } from '../services/scumServer.service.js';
 
 function formatBangkokDate(date = new Date()) {
@@ -16,22 +16,31 @@ function formatBangkokDate(date = new Date()) {
   }).format(date);
 }
 
-function buildStatusEmbed(status) {
+async function buildStatusEmbed(status) {
   const isOnline = status?.status === 'online';
+
+  // 🔥 ดึง GIF จาก config
+  const ONLINE_GIF = await getRuntimeConfig('SERVER_STATUS_GIF_ONLINE');
+  const OFFLINE_GIF = await getRuntimeConfig('SERVER_STATUS_GIF_OFFLINE');
+
+  const gifUrl = isOnline ? ONLINE_GIF : OFFLINE_GIF;
 
   if (!status) {
     return new EmbedBuilder()
       .setColor(0xe74c3c)
       .setTitle('📊 SCUM SERVER STATUS')
-      .setDescription('ไม่สามารถดึงข้อมูลเซิร์ฟเวอร์ได้ในตอนนี้')
+      .setDescription('ไม่สามารถดึงข้อมูลเซิร์ฟเวอร์ได้')
+      '',
       .addFields({ name: '📡 สถานะ', value: '🔴 Offline / fetch error', inline: false })
+      '',
+      .setImage(OFFLINE_GIF || null)
       .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
   }
 
   const ipPort =
     status.ip && status.port && status.ip !== '-' && status.port !== '-'
       ? `${status.ip}:${status.port}`
-      : '-';
+      : status.connect || '-';
 
   return new EmbedBuilder()
     .setColor(isOnline ? 0x2ecc71 : 0xe74c3c)
@@ -58,6 +67,7 @@ function buildStatusEmbed(status) {
       '******กรุณาออกจากบังเกอร์และหยุดขับขี่รถหยุดการกระทำก่อนเซิฟรี 5 นาที******                      ',
       '',
     ].join('\n'))
+    .setImage(gifUrl || null) // 🔥 ตรงนี้คือ GIF
     .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
 }
 
@@ -65,29 +75,27 @@ export async function runServerStatusJob(client) {
   const channelId = IDS.SERVER_STATUS_CHANNEL_ID;
   const serverId = IDS.BATTLEMETRICS_SERVER_ID;
 
-  if (!channelId || !serverId) return { skipped: true, reason: 'missing_config' };
+  if (!channelId || !serverId) return;
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased?.()) {
-    console.warn('⚠️ SERVER_STATUS_CHANNEL_ID is invalid or not text-based:', channelId);
-    return { skipped: true, reason: 'invalid_channel' };
-  }
+  if (!channel?.isTextBased?.()) return;
 
   const status = await getScumServerStatus(serverId);
 
+  // 🔥 ตั้งสถานะบอท
   if (client?.user) {
-    const presenceText =
+    const text =
       status?.status === 'online'
         ? `👥 Online ${status.players} Players`
         : '🔴 Offline';
 
     await client.user.setPresence({
-      activities: [{ name: presenceText, type: ActivityType.Watching }],
+      activities: [{ name: text, type: ActivityType.Watching }],
       status: 'online',
     });
   }
 
-  const embed = buildStatusEmbed(status);
+  const embed = await buildStatusEmbed(status);
 
   let message = null;
   const existingMessageId = IDS.SERVER_STATUS_MESSAGE_ID;
@@ -106,18 +114,8 @@ export async function runServerStatusJob(client) {
   if (!message) {
     const created = await channel.send({ embeds: [embed] });
     await created.pin().catch(() => {});
-    await setRuntimeConfig('SERVER_STATUS_CHANNEL_ID', channel.id);
     await setRuntimeConfig('SERVER_STATUS_MESSAGE_ID', created.id);
-    console.log('✅ Server status message created:', created.id);
-    return { skipped: false, created: true, messageId: created.id, status: status?.status || 'unknown' };
+  } else {
+    await message.edit({ embeds: [embed] });
   }
-
-  await message.edit({ embeds: [embed] });
-
-  if (existingMessageId !== message.id) {
-    await setRuntimeConfig('SERVER_STATUS_CHANNEL_ID', channel.id);
-    await setRuntimeConfig('SERVER_STATUS_MESSAGE_ID', message.id);
-  }
-
-  return { skipped: false, created: false, messageId: message.id, status: status?.status || 'unknown' };
 }
