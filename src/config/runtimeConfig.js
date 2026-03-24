@@ -22,8 +22,6 @@ const CONFIG_META = {
   SERVER_STATUS_CHANNEL_ID: "Server Status Channel",
   SERVER_STATUS_MESSAGE_ID: "Server Status Message",
   SERVER_STATUS_REFRESH_SECONDS: "Server Status Refresh Seconds",
-  SERVER_STATUS_GIF_ONLINE: "Server Status GIF Online",
-  SERVER_STATUS_GIF_OFFLINE: "Server Status GIF Offline",
 };
 
 export async function loadRuntimeDiscordConfig() {

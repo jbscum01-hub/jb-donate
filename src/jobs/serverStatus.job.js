@@ -45,7 +45,7 @@ function buildLines(status) {
   const ipPort =
     status.ip && status.port && status.ip !== '-' && status.port !== '-'
       ? `${status.ip}:${status.port}`
-      : '-';
+      : (status.connect || '-');
 
   return [
     `**${status.name}**`,
@@ -72,14 +72,11 @@ function buildStatusEmbed(status) {
   const embed = new EmbedBuilder()
     .setColor(isOnline ? 0x2ecc71 : 0xe74c3c)
     .setTitle('📊 SCUM SERVER STATUS')
-    .setDescription(buildLines(status).join('
-'))
+    .setDescription(buildLines(status).join('\n'))
     .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
 
   const imageUrl = resolveImageUrl(isOnline);
-  if (imageUrl) {
-    embed.setImage(imageUrl);
-  }
+  if (imageUrl) embed.setImage(imageUrl);
 
   return embed;
 }
@@ -94,6 +91,7 @@ export async function runServerStatusJob(client) {
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased?.()) {
+    console.warn('⚠️ SERVER_STATUS_CHANNEL_ID ไม่ถูกต้อง หรือไม่ใช่ห้องข้อความ:', channelId);
     return { skipped: true, reason: 'invalid_channel' };
   }
 
@@ -129,9 +127,9 @@ export async function runServerStatusJob(client) {
 
   if (!message) {
     const created = await channel.send({ embeds: [embed] });
-    await created.pin().catch(() => {});
     await setRuntimeConfig('SERVER_STATUS_CHANNEL_ID', channel.id);
     await setRuntimeConfig('SERVER_STATUS_MESSAGE_ID', created.id);
+    console.log('✅ Server status message created:', created.id);
     return { skipped: false, created: true, messageId: created.id, status: status?.status || 'unknown' };
   }
 

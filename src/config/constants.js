@@ -25,6 +25,4 @@ export const IDS = {
   get SERVER_STATUS_CHANNEL_ID() { return getRuntimeConfig("SERVER_STATUS_CHANNEL_ID"); },
   get SERVER_STATUS_MESSAGE_ID() { return getRuntimeConfig("SERVER_STATUS_MESSAGE_ID"); },
   get SERVER_STATUS_REFRESH_SECONDS() { return getRuntimeConfig("SERVER_STATUS_REFRESH_SECONDS", "60"); },
-  get SERVER_STATUS_GIF_ONLINE() { return getRuntimeConfig("SERVER_STATUS_GIF_ONLINE"); },
-  get SERVER_STATUS_GIF_OFFLINE() { return getRuntimeConfig("SERVER_STATUS_GIF_OFFLINE"); },
 };
