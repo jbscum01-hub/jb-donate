@@ -129,7 +129,7 @@ function getRestartWindowInfo(now = new Date()) {
   const restartHours = parseRestartHours(IDS.RESTART_SCHEDULE_HOURS);
 
   for (const hour of restartHours) {
-    if (p.hour === hour && p.minute >= 0 && p.minute <= RESTART_OPEN_NOTIFY_WINDOW_MINUTES) {
+    if (p.hour === hour && p.minute >= 2 && p.minute <= RESTART_OPEN_NOTIFY_WINDOW_MINUTES) {
       return {
         key: `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}-${String(hour).padStart(2, '0')}`,
         hour,
@@ -153,7 +153,6 @@ async function notifyServerOpened(client, status) {
     .setDescription([
       `**${status?.name || 'SCUM Server'}** เปิดให้เข้าเล่นได้ตามปกติแล้ว`,
       '',
-      `👥 ผู้เล่นตอนนี้: ${status?.players ?? 0}/${status?.maxPlayers || '-'}`,
       '🚪 สามารถเข้าเซิร์ฟได้เลย',
     ].join('\n'))
     .setFooter({ text: `ตรวจพบการกลับมาออนไลน์เวลา ${formatBangkokDate()}` });
