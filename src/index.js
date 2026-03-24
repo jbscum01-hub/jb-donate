@@ -13,6 +13,7 @@ import { IDS } from "./config/constants.js";
 import { loadRuntimeDiscordConfig, setRuntimeConfig } from "./config/runtimeConfig.js";
 import { runVipTick } from "./jobs/vipRunner.js";
 import { runServerStatusJob } from "./jobs/serverStatus.job.js";
+import { runRestartNotifyJob } from "./jobs/restartNotify.job.js";
 import { buildAdminDashboardMessage } from "./discord/panels/adminDashboard.js";
 import { AuditRepo } from "./db/repo/audit.repo.js";
 
@@ -33,6 +34,7 @@ http
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 let vipRunning = false;
 let serverStatusRunning = false;
+let restartNotifyRunning = false;
 
 async function vipTickSafe() {
   if (vipRunning) return;
@@ -59,6 +61,22 @@ async function serverStatusTickSafe() {
     console.error('Server status tick error:', e);
   } finally {
     serverStatusRunning = false;
+  }
+}
+
+
+async function restartNotifyTickSafe() {
+  if (restartNotifyRunning) return;
+  restartNotifyRunning = true;
+  try {
+    const result = await runRestartNotifyJob(client);
+    if (!result?.skipped) {
+      console.log('🔔 Restart notify sent:', result);
+    }
+  } catch (e) {
+    console.error('Restart notify tick error:', e);
+  } finally {
+    restartNotifyRunning = false;
   }
 }
 
@@ -119,6 +137,9 @@ client.once("ready", async () => {
 
   await serverStatusTickSafe();
   setInterval(serverStatusTickSafe, getServerStatusRefreshMs());
+
+  await restartNotifyTickSafe();
+  setInterval(restartNotifyTickSafe, 30 * 1000);
 });
 
 client.on("interactionCreate", async (interaction) => {

@@ -1,10 +1,11 @@
 import { EmbedBuilder } from 'discord.js';
 import { IDS } from '../config/constants.js';
 
-const notifiedKeys = new Set();
+const DEFAULT_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
+const DEFAULT_NOTIFY_MINUTES = [60, 30, 5, 2, 1];
+const sentCache = new Set();
 
-function getBangkokNow() {
-  const now = new Date();
+function getBangkokParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Bangkok',
     year: 'numeric',
@@ -14,7 +15,7 @@ function getBangkokNow() {
     minute: '2-digit',
     second: '2-digit',
     hour12: false,
-  }).formatToParts(now);
+  }).formatToParts(date);
 
   const map = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
   return {
@@ -27,133 +28,104 @@ function getBangkokNow() {
   };
 }
 
-function parseNumberList(value, fallback = []) {
-  const text = String(value ?? '').trim();
-  if (!text) return [...fallback];
-  return [...new Set(text.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n)))].sort((a, b) => a - b);
+function parseHours(value) {
+  const hours = String(value ?? '')
+    .split(',')
+    .map((item) => Number(String(item).trim()))
+    .filter((num) => Number.isInteger(num) && num >= 0 && num <= 23)
+    .sort((a, b) => a - b);
+
+  return hours.length ? [...new Set(hours)] : DEFAULT_HOURS;
 }
 
-function getNextRestartBangkok(scheduleHours) {
-  const now = getBangkokNow();
-  const currentMinutes = now.hour * 60 + now.minute;
+function parseNotifyMinutes(value) {
+  const minutes = String(value ?? '')
+    .split(',')
+    .map((item) => Number(String(item).trim()))
+    .filter((num) => Number.isInteger(num) && num >= 1 && num <= 1440)
+    .sort((a, b) => b - a);
 
-  for (const hour of scheduleHours) {
-    const targetMinutes = hour * 60;
-    if (targetMinutes > currentMinutes) {
+  return minutes.length ? [...new Set(minutes)] : DEFAULT_NOTIFY_MINUTES;
+}
+
+function formatRestartClock(hour) {
+  return `${String(hour).padStart(2, '0')}:00 น.`;
+}
+
+function getNextRestart(hours, now = new Date()) {
+  const p = getBangkokParts(now);
+
+  for (const hour of hours) {
+    if (hour > p.hour || (hour === p.hour && p.minute === 0 && p.second === 0)) {
       return {
-        year: now.year,
-        month: now.month,
-        day: now.day,
+        year: p.year,
+        month: p.month,
+        day: p.day,
         hour,
         minute: 0,
-        daysAhead: 0,
       };
     }
   }
 
+  const d = new Date(Date.UTC(p.year, p.month - 1, p.day));
+  d.setUTCDate(d.getUTCDate() + 1);
   return {
-    year: now.year,
-    month: now.month,
-    day: now.day + 1,
-    hour: scheduleHours[0],
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth() + 1,
+    day: d.getUTCDate(),
+    hour: hours[0],
     minute: 0,
-    daysAhead: 1,
   };
 }
 
-function getMinutesUntilNextRestart(scheduleHours) {
-  const now = getBangkokNow();
-  const next = getNextRestartBangkok(scheduleHours);
-  const currentMinutes = now.hour * 60 + now.minute;
-  const nextMinutes = next.hour * 60 + next.minute + (next.daysAhead * 24 * 60);
-  return nextMinutes - currentMinutes;
+function getDiffMinutes(nextRestart, now = new Date()) {
+  const p = getBangkokParts(now);
+  const nowUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour - 7, p.minute, p.second);
+  const nextUtc = Date.UTC(nextRestart.year, nextRestart.month - 1, nextRestart.day, nextRestart.hour - 7, nextRestart.minute, 0);
+  return Math.floor((nextUtc - nowUtc) / 60000);
 }
 
-function buildNotifyEmbed(minutesLeft, nextHour) {
-  const title = '⏰ แจ้งเตือนรีเซิร์ฟ';
-  const nextText = `${String(nextHour).padStart(2, '0')}:00 น.`;
-  const isUrgent = minutesLeft <= 5;
-
-  return new EmbedBuilder()
-    .setColor(isUrgent ? 0xe67e22 : 0xf1c40f)
-    .setTitle(title)
-    .setDescription([
-      `เซิร์ฟเวอร์จะปิดและเปิดใหม่ในอีก **${minutesLeft} นาที**`,
-      `รอบรีถัดไปเวลา **${nextText}**`,
-      '',
-      'กรุณาออกจากบังเกอร์ และหยุดขับขี่ยานพาหนะก่อนถึงเวลารี',
-    ].join('\n'))
-    .setFooter({ text: 'ระบบแจ้งเตือนอัตโนมัติ' })
-    .setTimestamp(new Date());
-}
-
-function cleanupNotificationCache(scheduleHours, notifyMinutes) {
-  const valid = new Set();
-  for (const hour of scheduleHours) {
-    for (const minute of notifyMinutes) {
-      valid.add(`${hour}-${minute}`);
-    }
-  }
-  for (const key of notifiedKeys) {
-    const parts = key.split('-');
-    if (parts.length !== 2) {
-      notifiedKeys.delete(key);
-      continue;
-    }
-    const [, minute] = parts;
-    if (!valid.has(key) && !Number.isFinite(Number(minute))) {
-      notifiedKeys.delete(key);
-    }
-  }
+function makeCacheKey(nextRestart, minutesLeft) {
+  return [
+    nextRestart.year,
+    String(nextRestart.month).padStart(2, '0'),
+    String(nextRestart.day).padStart(2, '0'),
+    String(nextRestart.hour).padStart(2, '0'),
+    String(minutesLeft).padStart(3, '0'),
+  ].join('-');
 }
 
 export async function runRestartNotifyJob(client) {
-  const scheduleHours = parseNumberList(IDS.RESTART_SCHEDULE_HOURS, [0, 3, 6, 9, 12, 15, 18, 21]);
-  const notifyMinutes = parseNumberList(IDS.RESTART_NOTIFY_MINUTES, [60, 30, 5, 2, 1]);
   const channelId = IDS.RESTART_NOTIFY_CHANNEL_ID || IDS.SERVER_STATUS_CHANNEL_ID;
-
-  if (!scheduleHours.length || !notifyMinutes.length || !channelId) {
-    return { skipped: true, reason: 'missing_config' };
-  }
-
-  cleanupNotificationCache(scheduleHours, notifyMinutes);
+  if (!channelId) return { skipped: true, reason: 'missing_channel' };
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased?.()) {
-    return { skipped: true, reason: 'invalid_channel' };
-  }
+  if (!channel?.isTextBased?.()) return { skipped: true, reason: 'invalid_channel' };
 
-  const now = getBangkokNow();
-  const next = getNextRestartBangkok(scheduleHours);
-  const diffMin = getMinutesUntilNextRestart(scheduleHours);
+  const hours = parseHours(IDS.RESTART_SCHEDULE_HOURS);
+  const notifyMinutes = parseNotifyMinutes(IDS.RESTART_NOTIFY_MINUTES);
+  const nextRestart = getNextRestart(hours);
+  const diffMin = getDiffMinutes(nextRestart);
 
-  if (!notifyMinutes.includes(diffMin)) {
-    return { skipped: true, reason: 'not_time', minutesLeft: diffMin };
-  }
+  if (diffMin < 0) return { skipped: true, reason: 'negative_diff', diffMin };
 
-  const cacheKey = `${next.hour}-${diffMin}`;
-  if (notifiedKeys.has(cacheKey)) {
-    return { skipped: true, reason: 'already_sent', minutesLeft: diffMin };
-  }
+  const hitMinute = notifyMinutes.find((m) => diffMin === m);
+  if (!hitMinute) return { skipped: true, reason: 'not_time', diffMin };
 
-  const embed = buildNotifyEmbed(diffMin, next.hour);
+  const cacheKey = makeCacheKey(nextRestart, hitMinute);
+  if (sentCache.has(cacheKey)) return { skipped: true, reason: 'already_sent', diffMin, cacheKey };
+
+  const embed = new EmbedBuilder()
+    .setColor(hitMinute <= 5 ? 0xe67e22 : 0xf1c40f)
+    .setTitle('⏰ แจ้งเตือนรีเซิร์ฟ')
+    .setDescription([
+      `เซิร์ฟเวอร์จะรีในอีก **${hitMinute} นาที**`,
+      '',
+      `🕒 รอบรีถัดไป: **${formatRestartClock(nextRestart.hour)}**`,
+      'กรุณาออกจากบังเกอร์ และหลีกเลี่ยงการขับขี่ยานพาหนะก่อนเซิร์ฟรี',
+    ].join('\n'));
+
   await channel.send({ embeds: [embed] });
-  notifiedKeys.add(cacheKey);
-
-  // prune old keys when we're safely past a restart boundary
-  if (now.minute > 2) {
-    const keepHours = new Set(scheduleHours.map((h) => String(h)));
-    for (const key of [...notifiedKeys]) {
-      const [hourText] = key.split('-');
-      if (!keepHours.has(hourText)) notifiedKeys.delete(key);
-    }
-  }
-
-  return {
-    skipped: false,
-    sent: true,
-    channelId,
-    minutesLeft: diffMin,
-    nextRestartHour: next.hour,
-  };
+  sentCache.add(cacheKey);
+  return { skipped: false, sent: true, diffMin, cacheKey, nextRestartHour: nextRestart.hour };
 }

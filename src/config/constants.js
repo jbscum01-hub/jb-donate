@@ -29,4 +29,5 @@ export const IDS = {
   get SERVER_STATUS_GIF_OFFLINE() { return getRuntimeConfig("SERVER_STATUS_GIF_OFFLINE"); },
   get RESTART_NOTIFY_CHANNEL_ID() { return getRuntimeConfig("RESTART_NOTIFY_CHANNEL_ID"); },
   get RESTART_SCHEDULE_HOURS() { return getRuntimeConfig("RESTART_SCHEDULE_HOURS", "0,3,6,9,12,15,18,21"); },
+  get RESTART_NOTIFY_MINUTES() { return getRuntimeConfig("RESTART_NOTIFY_MINUTES", "60,30,5,2,1"); },
 };
