@@ -3,8 +3,8 @@ import { IDS } from '../config/constants.js';
 import { setRuntimeConfig } from '../config/runtimeConfig.js';
 import { getScumServerStatus } from '../services/scumServer.service.js';
 
-const DEFAULT_RESTART_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
-const RESTART_NOTIFY_WINDOW_MINUTES = 20;
+const DEFAULT_RESTART_HOURS = [1, 4, 7, 10, 13, 16, 19, 22];
+const RESTART_OPEN_NOTIFY_WINDOW_MINUTES = 20;
 
 let lastKnownServerState = null;
 let lastOpenedNotifyKey = '';
@@ -124,15 +124,20 @@ function buildStatusEmbed(status) {
   return embed;
 }
 
-function getOpenedNotifyKey(now = new Date()) {
-  const p = getBangkokParts(now);
-  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}-${String(p.hour).padStart(2, '0')}`;
-}
-
-function shouldNotifyServerOpened(now = new Date()) {
+function getRestartWindowInfo(now = new Date()) {
   const p = getBangkokParts(now);
   const restartHours = parseRestartHours(IDS.RESTART_SCHEDULE_HOURS);
-  return restartHours.includes(p.hour) && p.minute <= RESTART_NOTIFY_WINDOW_MINUTES;
+
+  for (const hour of restartHours) {
+    if (p.hour === hour && p.minute >= 0 && p.minute <= RESTART_OPEN_NOTIFY_WINDOW_MINUTES) {
+      return {
+        key: `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}-${String(hour).padStart(2, '0')}`,
+        hour,
+      };
+    }
+  }
+
+  return null;
 }
 
 async function notifyServerOpened(client, status) {
@@ -171,18 +176,16 @@ export async function runServerStatusJob(client) {
   const previousState = lastKnownServerState;
   let openedNotifySent = false;
 
+  const restartWindow = getRestartWindowInfo();
   if (
-    previousState !== null &&
-    previousState === 'offline' &&
     currentState === 'online' &&
-    shouldNotifyServerOpened()
+    restartWindow &&
+    restartWindow.key !== lastOpenedNotifyKey &&
+    (previousState === 'offline' || previousState === null || previousState === 'online')
   ) {
-    const notifyKey = getOpenedNotifyKey();
-    if (notifyKey !== lastOpenedNotifyKey) {
-      openedNotifySent = await notifyServerOpened(client, status);
-      if (openedNotifySent) {
-        lastOpenedNotifyKey = notifyKey;
-      }
+    openedNotifySent = await notifyServerOpened(client, status);
+    if (openedNotifySent) {
+      lastOpenedNotifyKey = restartWindow.key;
     }
   }
 
@@ -223,13 +226,13 @@ export async function runServerStatusJob(client) {
       skipped: false,
       created: true,
       messageId: created.id,
-      withImage: Boolean(embed.data.image?.url),
-      state: currentState,
+      status: currentState,
       openedNotifySent,
     };
   }
 
   await message.edit({ embeds: [embed] });
+
   if (existingMessageId !== message.id) {
     await setRuntimeConfig('SERVER_STATUS_CHANNEL_ID', channel.id);
     await setRuntimeConfig('SERVER_STATUS_MESSAGE_ID', message.id);
@@ -239,8 +242,7 @@ export async function runServerStatusJob(client) {
     skipped: false,
     created: false,
     messageId: message.id,
-    withImage: Boolean(embed.data.image?.url),
-    state: currentState,
+    status: currentState,
     openedNotifySent,
   };
 }
