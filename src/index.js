@@ -16,6 +16,7 @@ import { runServerStatusJob } from "./jobs/serverStatus.job.js";
 import { runRestartNotifyJob } from "./jobs/restartNotify.job.js";
 import { buildAdminDashboardMessage } from "./discord/panels/adminDashboard.js";
 import { AuditRepo } from "./db/repo/audit.repo.js";
+import { handleAdminAnnounceMessage } from './discord/handlers/admin.announce.js';
 
 const client = createClient();
 
@@ -144,6 +145,15 @@ client.once("ready", async () => {
 
 client.on("interactionCreate", async (interaction) => {
   await routeInteraction(interaction);
+});
+
+client.on("messageCreate", async (message) => {
+  try {
+    const handled = await handleAdminAnnounceMessage(message);
+    if (handled) return;
+  } catch (e) {
+    console.error("Admin announce message handler error:", e);
+  }
 });
 
 let loginInFlight = false;

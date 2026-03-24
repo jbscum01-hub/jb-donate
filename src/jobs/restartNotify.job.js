@@ -1,5 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { IDS } from '../config/constants.js';
+import { AuditRepo } from '../db/repo/audit.repo.js';
+import { getAnnounceRuntime, getAutoRestartMessage, sendRconAnnouncement } from '../services/rconAnnounce.service.js';
 
 const DEFAULT_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
 const DEFAULT_NOTIFY_MINUTES = [60, 30, 5, 2, 1];
@@ -126,6 +128,28 @@ export async function runRestartNotifyJob(client) {
     ].join('\n'));
 
   await channel.send({ embeds: [embed] });
+
+  let announceResult = { skipped: true, reason: 'auto_announce_disabled' };
+  const announceRuntime = getAnnounceRuntime();
+  if (announceRuntime.enabled && announceRuntime.autoEnabled) {
+    announceResult = await sendRconAnnouncement(getAutoRestartMessage(hitMinute), { source: `auto_restart_${hitMinute}` });
+    await AuditRepo.add({
+      guildId: channel.guild?.id ?? null,
+      actorId: null,
+      actorTag: 'SYSTEM',
+      action: 'ANNOUNCE_AUTO_SEND',
+      target: 'SCUM_RCON',
+      meta: {
+        minutes_left: hitMinute,
+        next_restart_hour: nextRestart.hour,
+        ok: announceResult.ok,
+        skipped: Boolean(announceResult.skipped),
+        reason: announceResult.reason ?? null,
+        cache_key: cacheKey,
+      },
+    }).catch(() => {});
+  }
+
   sentCache.add(cacheKey);
-  return { skipped: false, sent: true, diffMin, cacheKey, nextRestartHour: nextRestart.hour };
+  return { skipped: false, sent: true, diffMin, cacheKey, nextRestartHour: nextRestart.hour, announceResult };
 }

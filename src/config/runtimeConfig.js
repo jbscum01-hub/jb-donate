@@ -27,6 +27,22 @@ const CONFIG_META = {
   RESTART_NOTIFY_CHANNEL_ID: "Restart Notify Channel",
   RESTART_SCHEDULE_HOURS: "Restart Schedule Hours",
   RESTART_NOTIFY_MINUTES: "Restart Notify Minutes",
+  ANNOUNCE_ENABLED: "Announce Enabled",
+  ANNOUNCE_AUTO_ENABLED: "Auto Announce Enabled",
+  ANNOUNCE_ADMIN_COMMAND_ENABLED: "Admin Announce Command Enabled",
+  ANNOUNCE_ECHO_TO_CHANNEL_ENABLED: "Announce Echo To Channel Enabled",
+  ANNOUNCE_RCON_HOST: "Announce RCON Host",
+  ANNOUNCE_RCON_PORT: "Announce RCON Port",
+  ANNOUNCE_RCON_PASSWORD: "Announce RCON Password",
+  ANNOUNCE_RCON_LOGIN_DELAY_MS: "Announce RCON Login Delay Ms",
+  ANNOUNCE_RCON_SEND_DELAY_MS: "Announce RCON Send Delay Ms",
+  ANNOUNCE_RCON_CLOSE_DELAY_MS: "Announce RCON Close Delay Ms",
+  ANNOUNCE_RCON_COMMAND_PREFIX: "Announce RCON Command Prefix",
+  ANNOUNCE_ADMIN_COMMAND_PREFIX: "Admin Announce Command Prefix",
+  ANNOUNCE_MESSAGE_30: "Announce Message 30 Minutes",
+  ANNOUNCE_MESSAGE_5: "Announce Message 5 Minutes",
+  ANNOUNCE_MESSAGE_2: "Announce Message 2 Minutes",
+  ANNOUNCE_MESSAGE_1: "Announce Message 1 Minute",
 };
 
 export async function loadRuntimeDiscordConfig() {
