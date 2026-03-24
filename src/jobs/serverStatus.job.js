@@ -24,7 +24,7 @@ function buildStatusEmbed(status) {
       .setColor(0xe74c3c)
       .setTitle('📊 SCUM SERVER STATUS')
       .setDescription('ไม่สามารถดึงข้อมูลเซิร์ฟเวอร์ได้ในตอนนี้')
-      .addFields({ name: '📡 สถานะ', value: 'offline / fetch error', inline: false })
+      .addFields({ name: '📡 สถานะ', value: '🔴 Offline / fetch error', inline: false })
       .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
   }
 
@@ -40,14 +40,22 @@ function buildStatusEmbed(status) {
       `**${status.name}**`,
       'ข้อมูลห้องนี้อัปเดตอัตโนมัติ',
       '',
-      `📡 **สถานะ:** ${isOnline ? 'ออนไลน์' : status.status}`,
+      `📡 **สถานะเซิร์ฟเวอร์ :** ${isOnline ? '🟢 Online' : status.status}`,
       '',
-      `👥 **ผู้เล่นออนไลน์:** ${status.players}/${status.maxPlayers || '-'}`,
+      `👥 **ผู้เล่นออนไลน์ :** ${status.players}/${status.maxPlayers || '-'}`,
       '',
-      `⏳ **คิวรอเข้า:** ${String(status.queue ?? 0)}`,
+      `⏳ **คิวรอเข้า :** ${String(status.queue ?? 0)}`,
       '',
-      `🌐 **IP / Port:** ${ipPort}`,
+      `🌐 **IP / Port :** ${ipPort}`,
       '',
+      'เวลารีสตาร์ทเซิฟเวอร์'  
+      '⏰  08:00 น.'
+      '⏰  12:00 น.'
+﻿      '⏰﻿  18:00 น.'
+﻿      '⏰﻿  21:00 น.'
+﻿      '⏰﻿  00:00 น.'
+      '',
+      '******กรุณาออกจากบังเกอร์และหยุดขับขี่รถหยุดการกระทำก่อนเซิฟรี 5 นาที******'
     ].join('\n'))
     .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
 }
