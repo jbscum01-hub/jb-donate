@@ -41,9 +41,13 @@ function buildStatusEmbed(status) {
       'ข้อมูลห้องนี้อัปเดตอัตโนมัติ',
       '',
       `📡 **สถานะ:** ${isOnline ? 'ออนไลน์' : status.status}`,
+      '',
       `👥 **ผู้เล่นออนไลน์:** ${status.players}/${status.maxPlayers || '-'}`,
+      '',
       `⏳ **คิวรอเข้า:** ${String(status.queue ?? 0)}`,
+      '',
       `🌐 **IP / Port:** ${ipPort}`,
+      '',
     ].join('\n'))
     .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
 }
