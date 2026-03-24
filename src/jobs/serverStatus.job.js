@@ -19,7 +19,7 @@ async function runServerStatusJob(client, configRepo) {
   if (status) {
     const text =
       status.status === 'online'
-        ? `👥 ${status.players}/${status.maxPlayers} Players`
+        ? `👥 Online ${status.players} Players`
         : `🔴 Offline`;
 
     client.user.setPresence({
