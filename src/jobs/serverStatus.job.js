@@ -56,6 +56,7 @@ function buildStatusEmbed(status) {
 ﻿      '⏰﻿  00:00 น.',
       '',
       '******กรุณาออกจากบังเกอร์และหยุดขับขี่รถหยุดการกระทำก่อนเซิฟรี 5 นาที******',
+      '',
     ].join('\n'))
     .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
 }
