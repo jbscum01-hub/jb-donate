@@ -16,71 +16,65 @@ function formatBangkokDate(date = new Date()) {
   }).format(date);
 }
 
-function isValidUrl(value) {
-  const text = String(value ?? '').trim();
-  if (!text) return false;
-  try {
-    const url = new URL(text);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function resolveImageUrl(isOnline) {
-  const candidate = isOnline ? IDS.SERVER_STATUS_GIF_ONLINE : IDS.SERVER_STATUS_GIF_OFFLINE;
-  return isValidUrl(candidate) ? String(candidate).trim() : null;
+function normalizeImageUrl(value) {
+  const url = String(value ?? '').trim();
+  if (!url) return '';
+  if (!/^https?:\/\//i.test(url)) return '';
+  return url;
 }
 
 function buildLines(status) {
-  if (!status) {
-    return [
-      'ไม่สามารถดึงข้อมูลเซิร์ฟเวอร์ได้ในตอนนี้',
-      '',
-      '📡 **สถานะ:** 🔴 Offline / fetch error',
-    ];
-  }
-
-  const isOnline = status.status === 'online';
-  const ipPort =
-    status.ip && status.port && status.ip !== '-' && status.port !== '-'
-      ? `${status.ip}:${status.port}`
-      : (status.connect || '-');
+  const isOnline = status?.status === 'online';
+  const ipPort = status?.ip && status?.port && status.ip !== '-' && status.port !== '-'
+    ? `${status.ip}:${status.port}`
+    : status?.connect || '-';
 
   return [
-    `**${status.name}**`,
+    `**${status?.name || 'SCUM Server'}**`,
     'ข้อมูลห้องนี้อัปเดตอัตโนมัติ',
     '',
-    `📡 **สถานะ:** ${isOnline ? '🟢 ออนไลน์' : `🔴 ${status.status}`}`,
+    `📡 **สถานะ:** ${isOnline ? '🟢 ออนไลน์' : `🔴 ${status?.status || 'offline'}`}`,
     '',
-    `👥 **ผู้เล่นออนไลน์:** ${status.players}/${status.maxPlayers || '-'}`,
+    `👥 **ผู้เล่นออนไลน์:** ${status?.players ?? 0}/${status?.maxPlayers || '-'}`,
     '',
-    `⏳ **คิวรอเข้า:** ${String(status.queue ?? 0)}`,
+    `⏳ **คิวรอเข้า:** ${String(status?.queue ?? 0)}`,
     '',
     `🌐 **IP / Port:** ${ipPort}`,
     '',
-    '**เวลารีสตาร์ทเซิร์ฟเวอร์**',
+    'เวลารีสตาร์ทเซิร์ฟเวอร์',
     '⏰ 08:00 น.',
     '⏰ 12:00 น.',
     '⏰ 18:00 น.',
     '⏰ 21:00 น.',
     '⏰ 00:00 น.',
     '',
-    '***กรุณาออกจากบังเกอร์ และหยุดขับขี่รถก่อนเซิร์ฟรี 5 นาที***',
-    '',
+    '*กรุณาออกจากบังเกอร์ และหยุดขับขี่ยานพาหนะก่อนเซิร์ฟรี 5 นาที*',
   ];
 }
 
 function buildStatusEmbed(status) {
   const isOnline = status?.status === 'online';
+  const onlineImage = normalizeImageUrl(IDS.SERVER_STATUS_GIF_ONLINE);
+  const offlineImage = normalizeImageUrl(IDS.SERVER_STATUS_GIF_OFFLINE);
+  const imageUrl = isOnline ? onlineImage : offlineImage;
+
   const embed = new EmbedBuilder()
     .setColor(isOnline ? 0x2ecc71 : 0xe74c3c)
     .setTitle('📊 SCUM SERVER STATUS')
-    .setDescription(buildLines(status).join('\n'))
     .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
 
-  const imageUrl = resolveImageUrl(isOnline);
-  if (imageUrl) embed.setImage(imageUrl);
+  if (!status) {
+    embed
+      .setDescription('ไม่สามารถดึงข้อมูลเซิร์ฟเวอร์ได้ในตอนนี้')
+      .addFields({ name: '📡 สถานะ', value: '🔴 offline / fetch error', inline: false });
+  } else {
+    embed.setDescription(buildLines(status).join('\n'));
+  }
+
+  if (imageUrl) {
+    embed.setImage(imageUrl);
+    console.log('📷 Server status image:', imageUrl);
+  }
 
   return embed;
 }
@@ -89,23 +83,17 @@ export async function runServerStatusJob(client) {
   const channelId = IDS.SERVER_STATUS_CHANNEL_ID;
   const serverId = IDS.BATTLEMETRICS_SERVER_ID;
 
-  if (!channelId || !serverId) {
-    return { skipped: true, reason: 'missing_config' };
-  }
+  if (!channelId || !serverId) return { skipped: true, reason: 'missing_config' };
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased?.()) {
-    console.warn('⚠️ SERVER_STATUS_CHANNEL_ID ไม่ถูกต้อง หรือไม่ใช่ห้องข้อความ:', channelId);
-    return { skipped: true, reason: 'invalid_channel' };
-  }
+  if (!channel?.isTextBased?.()) return { skipped: true, reason: 'invalid_channel' };
 
   const status = await getScumServerStatus(serverId);
 
   if (client?.user) {
-    const presenceText =
-      status?.status === 'online'
-        ? `👥 Online ${status.players} Players`
-        : '🔴 Offline';
+    const presenceText = status?.status === 'online'
+      ? `👥 Online ${status.players}/${status.maxPlayers || '-'} Players`
+      : '🔴 Offline';
 
     await client.user.setPresence({
       activities: [{ name: presenceText, type: ActivityType.Watching }],
@@ -114,7 +102,6 @@ export async function runServerStatusJob(client) {
   }
 
   const embed = buildStatusEmbed(status);
-
   let message = null;
   const existingMessageId = IDS.SERVER_STATUS_MESSAGE_ID;
 
@@ -131,18 +118,17 @@ export async function runServerStatusJob(client) {
 
   if (!message) {
     const created = await channel.send({ embeds: [embed] });
+    await created.pin().catch(() => {});
     await setRuntimeConfig('SERVER_STATUS_CHANNEL_ID', channel.id);
     await setRuntimeConfig('SERVER_STATUS_MESSAGE_ID', created.id);
-    console.log('✅ Server status message created:', created.id);
-    return { skipped: false, created: true, messageId: created.id, status: status?.status || 'unknown' };
+    return { skipped: false, created: true, messageId: created.id, withImage: Boolean(embed.data.image?.url) };
   }
 
   await message.edit({ embeds: [embed] });
-
   if (existingMessageId !== message.id) {
     await setRuntimeConfig('SERVER_STATUS_CHANNEL_ID', channel.id);
     await setRuntimeConfig('SERVER_STATUS_MESSAGE_ID', message.id);
   }
 
-  return { skipped: false, created: false, messageId: message.id, status: status?.status || 'unknown' };
+  return { skipped: false, created: false, messageId: message.id, withImage: Boolean(embed.data.image?.url) };
 }
