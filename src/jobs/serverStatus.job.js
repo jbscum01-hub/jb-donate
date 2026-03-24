@@ -100,7 +100,7 @@ export async function runServerStatusJob(client) {
   if (client?.user) {
     const presenceText =
       status?.status === 'online'
-        ? `👥 ${status.players}/${status.maxPlayers} Players`
+        ? `👥 Online ${status.players} Players`
         : '🔴 Offline';
 
     await client.user.setPresence({
