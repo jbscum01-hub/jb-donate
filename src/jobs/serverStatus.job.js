@@ -19,36 +19,30 @@ function formatBangkokDate(date = new Date()) {
 function buildStatusEmbed(status) {
   const isOnline = status?.status === 'online';
 
-  const embed = new EmbedBuilder()
+  if (!status) {
+    return new EmbedBuilder()
+      .setColor(0xe74c3c)
+      .setTitle('📊 SCUM SERVER STATUS')
+      .setDescription('ไม่สามารถดึงข้อมูลเซิร์ฟเวอร์ได้ในตอนนี้')
+      .addFields({ name: '📡 สถานะ', value: 'offline / fetch error', inline: false })
+      .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
+  }
+
+  const ipPort = status.ip !== '-' || status.port !== '-' ? `${status.ip}:${status.port}` : '-';
+
+  return new EmbedBuilder()
     .setColor(isOnline ? 0x2ecc71 : 0xe74c3c)
     .setTitle('📊 SCUM SERVER STATUS')
-    .setDescription(status
-      ? `**${status.name}**\nข้อมูลห้องนี้อัปเดตอัตโนมัติ`
-      : 'ไม่สามารถดึงข้อมูลเซิร์ฟเวอร์ได้ในตอนนี้')
+    .setDescription([
+      `**${status.name}**`,
+      'ข้อมูลห้องนี้อัปเดตอัตโนมัติ',
+      '',
+      `📡 **สถานะ:** ${isOnline ? 'ออนไลน์' : status.status}`,
+      `👥 **ผู้เล่นออนไลน์:** ${status.players}/${status.maxPlayers || '-'}`,
+      `⏳ **คิวรอเข้า:** ${String(status.queue ?? 0)}`,
+      `🌐 **IP / Port:** ${ipPort}`,
+    ].join('\n'))
     .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
-
-  if (!status) {
-    embed.addFields({ name: '📡 สถานะ', value: 'offline / fetch error', inline: true });
-    return embed;
-  }
-
-  embed.addFields(
-    { name: '📡 สถานะ', value: isOnline ? 'ออนไลน์' : status.status, inline: true },
-    { name: '👥 ผู้เล่นออนไลน์', value: `${status.players}/${status.maxPlayers || '-'}`, inline: true },
-    { name: '⏳ คิวรอเข้า', value: String(status.queue ?? 0), inline: true },
-    { name: '🗺️ แผนที่', value: status.map || '-', inline: true },
-    { name: '🌐 IP / Port', value: status.ip !== '-' || status.port !== '-' ? `${status.ip}:${status.port}` : '-', inline: true },
-    { name: '🏳️ โซน', value: status.country || '-', inline: true },
-  );
-
-  if (status.version && status.version !== '-') {
-    embed.addFields({ name: '🧩 เวอร์ชัน', value: status.version, inline: true });
-  }
-  if (status.rank && status.rank !== '-') {
-    embed.addFields({ name: '📈 Rank', value: status.rank, inline: true });
-  }
-
-  return embed;
 }
 
 export async function runServerStatusJob(client) {
