@@ -18,6 +18,10 @@ const CONFIG_META = {
   SLIP_ARCHIVE_CHANNEL_ID: "Slip Archive Channel",
   VEHICLE_PLATE_LOG_CHANNEL_ID: "Vehicle Plate Log Channel",
   TICKET_CATEGORY_ID: "Ticket Category",
+  BATTLEMETRICS_SERVER_ID: "BattleMetrics Server ID",
+  SERVER_STATUS_CHANNEL_ID: "Server Status Channel",
+  SERVER_STATUS_MESSAGE_ID: "Server Status Message",
+  SERVER_STATUS_REFRESH_SECONDS: "Server Status Refresh Seconds",
 };
 
 export async function loadRuntimeDiscordConfig() {

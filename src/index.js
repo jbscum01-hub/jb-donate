@@ -12,6 +12,7 @@ import { ENV } from "./config/env.js";
 import { IDS } from "./config/constants.js";
 import { loadRuntimeDiscordConfig, setRuntimeConfig } from "./config/runtimeConfig.js";
 import { runVipTick } from "./jobs/vipRunner.js";
+import { runServerStatusJob } from "./jobs/serverStatus.job.js";
 import { buildAdminDashboardMessage } from "./discord/panels/adminDashboard.js";
 import { AuditRepo } from "./db/repo/audit.repo.js";
 
@@ -31,6 +32,7 @@ http
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 let vipRunning = false;
+let serverStatusRunning = false;
 
 async function vipTickSafe() {
   if (vipRunning) return;
@@ -43,6 +45,27 @@ async function vipTickSafe() {
   } finally {
     vipRunning = false;
   }
+}
+
+async function serverStatusTickSafe() {
+  if (serverStatusRunning) return;
+  serverStatusRunning = true;
+  try {
+    const result = await runServerStatusJob(client);
+    if (!result?.skipped) {
+      console.log('📊 Server status updated:', result);
+    }
+  } catch (e) {
+    console.error('Server status tick error:', e);
+  } finally {
+    serverStatusRunning = false;
+  }
+}
+
+function getServerStatusRefreshMs() {
+  const seconds = Number(IDS.SERVER_STATUS_REFRESH_SECONDS || 60);
+  if (!Number.isFinite(seconds) || seconds < 30) return 60 * 1000;
+  return seconds * 1000;
 }
 
 async function ensureAdminDashboardMessage(client) {
@@ -93,6 +116,9 @@ client.once("ready", async () => {
 
   await vipTickSafe();
   setInterval(vipTickSafe, SIX_HOURS);
+
+  await serverStatusTickSafe();
+  setInterval(serverStatusTickSafe, getServerStatusRefreshMs());
 });
 
 client.on("interactionCreate", async (interaction) => {

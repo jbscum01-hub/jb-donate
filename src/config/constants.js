@@ -20,4 +20,9 @@ export const IDS = {
   get TICKET_CATEGORY_ID() { return getRuntimeConfig("TICKET_CATEGORY_ID"); },
   get PANEL_MESSAGE_ID() { return getRuntimeConfig("PANEL_MESSAGE_ID"); },
   get SHOP_QR_IMAGE_URL() { return getRuntimeConfig("SHOP_QR_IMAGE_URL"); },
+
+  get BATTLEMETRICS_SERVER_ID() { return getRuntimeConfig("BATTLEMETRICS_SERVER_ID"); },
+  get SERVER_STATUS_CHANNEL_ID() { return getRuntimeConfig("SERVER_STATUS_CHANNEL_ID"); },
+  get SERVER_STATUS_MESSAGE_ID() { return getRuntimeConfig("SERVER_STATUS_MESSAGE_ID"); },
+  get SERVER_STATUS_REFRESH_SECONDS() { return getRuntimeConfig("SERVER_STATUS_REFRESH_SECONDS", "60"); },
 };
