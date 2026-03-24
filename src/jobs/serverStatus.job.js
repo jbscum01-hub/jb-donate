@@ -30,9 +30,7 @@ async function buildStatusEmbed(status) {
       .setColor(0xe74c3c)
       .setTitle('📊 SCUM SERVER STATUS')
       .setDescription('ไม่สามารถดึงข้อมูลเซิร์ฟเวอร์ได้')
-      '',
       .addFields({ name: '📡 สถานะ', value: '🔴 Offline / fetch error', inline: false })
-      '',
       .setImage(OFFLINE_GIF || null)
       .setFooter({ text: `อัปเดตล่าสุด: ${formatBangkokDate()}` });
   }
