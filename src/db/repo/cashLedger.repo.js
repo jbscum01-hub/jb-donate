@@ -126,7 +126,7 @@ export const CashLedgerRepo = {
       const donatedRes = await client.query(
         `select coalesce(sum(amount), 0)::bigint as donated_total
          from tb_donate_orders
-         where ${" and ".join(orderWhere)}`,
+         where ${orderWhere.join(" and ")}`,
         orderValues,
       );
 
