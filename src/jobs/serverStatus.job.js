@@ -3,7 +3,7 @@ import { IDS } from '../config/constants.js';
 import { setRuntimeConfig } from '../config/runtimeConfig.js';
 import { getScumServerStatus } from '../services/scumServer.service.js';
 
-const DEFAULT_RESTART_HOURS = [1, 4, 7, 10, 13, 16, 19, 22];
+const DEFAULT_RESTART_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
 const RESTART_OPEN_NOTIFY_WINDOW_MINUTES = 20;
 
 let lastKnownServerState = null;
